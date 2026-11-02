@@ -41,6 +41,41 @@ namespace SchoolShield
             catch { }
         }
 
+
+        /// <summary>
+        /// "Save as" / "Open" windows of every program: saving into Documents keeps working, but the student cannot wander
+        /// around the computer. Drives and Network are hidden (paths still work), the shell right-click menu is off
+        /// (no "Open", "Send to", "Properties"), recent-file lists are not shown. Listing of drive roots is denied by the
+        /// installer through NTFS permissions, so even a typed path "C:\\" shows nothing. Switched off while the
+        /// administrator works on the real Windows desktop.
+        /// </summary>
+        public static void DialogLock(bool on)
+        {
+            const string exp = @"Software\Microsoft\Windows\CurrentVersion\Policies\Explorer";
+            const string net = @"Software\Microsoft\Windows\CurrentVersion\Policies\Network";
+            const string dlg = @"Software\Microsoft\Windows\CurrentVersion\Policies\comdlg32";
+            if (on)
+            {
+                SetDword(exp, "NoDrives", 0x3FFFFFF);
+                SetDword(exp, "NoNetHood", 1);
+                SetDword(exp, "NoComputersNearMe", 1);
+                SetDword(exp, "NoViewContextMenu", 1);
+                SetDword(net, "NoEntireNetwork", 1);
+                SetDword(dlg, "NoPlacesBar", 1);
+                SetDword(dlg, "NoFileMru", 1);
+            }
+            else
+            {
+                DeleteValue(exp, "NoDrives");
+                DeleteValue(exp, "NoNetHood");
+                DeleteValue(exp, "NoComputersNearMe");
+                DeleteValue(exp, "NoViewContextMenu");
+                DeleteValue(net, "NoEntireNetwork");
+                DeleteValue(dlg, "NoPlacesBar");
+                DeleteValue(dlg, "NoFileMru");
+            }
+        }
+
         public static void Apply(Config cfg)
         {
             const string sys = @"Software\Microsoft\Windows\CurrentVersion\Policies\System";
@@ -55,6 +90,13 @@ namespace SchoolShield
             SetDword(exp, "NoDriveTypeAutoRun", 255);
             SetDword(exp, "NoNetConnectDisconnect", 1);
             SetDword(@"Software\Policies\Microsoft\Windows\System", "DisableCMD", 1);
+
+            DialogLock(true);
+
+            // Dark mode for system windows (title bars, file dialogs of programs that follow it) to match the launcher.
+            int light = Theme.Dark ? 0 : 1;
+            SetDword(@"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize", "AppsUseLightTheme", light);
+            SetDword(@"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize", "SystemUsesLightTheme", light);
 
             // Sticky keys / filter keys / toggle keys pop-ups can open Ease of Access settings.
             SetString(@"Control Panel\Accessibility\StickyKeys", "Flags", "506");

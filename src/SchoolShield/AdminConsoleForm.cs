@@ -34,7 +34,8 @@ namespace SchoolShield
             ShowInTaskbar = false;
             TopMost = true;
             StartPosition = FormStartPosition.CenterScreen;
-            Size = new Size(820, 480);
+            Rectangle sc = Screen.PrimaryScreen.WorkingArea;
+            Size = new Size(Math.Min(Metrics.S(820), (int)(sc.Width * 0.92)), Math.Min(Metrics.S(480), (int)(sc.Height * 0.82)));
             BackColor = Green;
             Padding = new Padding(1);
 
@@ -59,7 +60,7 @@ namespace SchoolShield
 
             prompt.AutoSize = false;
             prompt.Dock = DockStyle.Left;
-            prompt.Width = 190;
+            prompt.Width = Metrics.S(190);
             prompt.TextAlign = ContentAlignment.MiddleLeft;
             prompt.ForeColor = Green;
             prompt.BackColor = Color.Black;

@@ -234,6 +234,8 @@ namespace SchoolShield
             all = Programs.Enumerate();
 
             Text = "Удаление программ из системы";
+            AutoScaleDimensions = new SizeF(96F, 96F);
+            AutoScaleMode = AutoScaleMode.Dpi;
             StartPosition = FormStartPosition.CenterScreen;
             TopMost = true;
             ShowInTaskbar = false;

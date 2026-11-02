@@ -5,7 +5,6 @@ using System.IO;
 using System.IO.Compression;
 using System.Reflection;
 using System.Runtime.InteropServices;
-using System.Security.Cryptography.X509Certificates;
 using Microsoft.Win32;
 
 namespace SchoolShield.Setup
@@ -44,10 +43,7 @@ namespace SchoolShield.Setup
             Progress(2);
             CleanupLeftovers();
 
-            Progress(8);
-            EnsureVcRuntime();
-
-            Progress(25);
+            Progress(10);
             Extract();
 
             Progress(70);
@@ -57,7 +53,7 @@ namespace SchoolShield.Setup
             RegisterUninstall();
 
             Progress(82);
-            if (DownloadModel) InstallModel();
+            if (DownloadModel) InstallPrerequisites();   // Visual C++, WebView2 and the AI model: downloaded here, not left to chance
 
             Progress(100);
             Log("Готово.");
@@ -219,62 +215,18 @@ namespace SchoolShield.Setup
             catch (Exception ex) { Log("! Запись в «Установка и удаление программ»: " + ex.Message); }
         }
 
-        // ------------------------------------------------------------------ VC++ runtime and the AI model
+        // ------------------------------------------------------------------ prerequisites (VC++, WebView2, AI model)
 
-        private static bool VcRuntimePresent()
+        private void InstallPrerequisites()
         {
             try
             {
-                using (RegistryKey k = Registry.LocalMachine.OpenSubKey(@"SOFTWARE\Microsoft\VisualStudio\14.0\VC\Runtimes\x64"))
-                    return k != null && Convert.ToInt32(k.GetValue("Installed") ?? 0) == 1;
-            }
-            catch { return false; }
-        }
-
-        /// <summary>ONNX Runtime (the AI filter) needs the Visual C++ 2015-2022 runtime; install it from Microsoft if it is missing.</summary>
-        private void EnsureVcRuntime()
-        {
-            if (VcRuntimePresent()) return;
-            Log("Нужен компонент Microsoft Visual C++ (для ИИ-фильтра). Скачиваю с microsoft.com…");
-            string path = Path.Combine(Path.GetTempPath(), "vc_redist.x64.exe");
-            try
-            {
-                Downloader.DownloadFile("https://aka.ms/vs/17/release/vc_redist.x64.exe", path, null);
-                if (!IsSignedByMicrosoft(path)) throw new InvalidDataException("Подпись файла не принадлежит Microsoft.");
-                ProcessStartInfo psi = new ProcessStartInfo(path, "/install /quiet /norestart");
-                psi.UseShellExecute = false;
-                psi.CreateNoWindow = true;
-                using (Process p = Process.Start(psi))
-                {
-                    p.WaitForExit();
-                    Log("Visual C++: код завершения " + p.ExitCode + (p.ExitCode == 3010 ? " (нужна перезагрузка)" : ""));
-                }
+                bool ok = Prerequisites.Repair(InstallDir, Log);
+                if (!ok) Log("! Не всё удалось установить. Откройте панель администратора: вкладка «ИИ-фильтр» → «Исправить» (нужен интернет).");
             }
             catch (Exception ex)
             {
-                Log("! Visual C++ не установлен: " + ex.Message + ". ИИ-фильтр может не запуститься (остальное работает).");
-            }
-            finally { try { File.Delete(path); } catch { } }
-        }
-
-        private static bool IsSignedByMicrosoft(string file)
-        {
-            X509Certificate2 cert = new X509Certificate2(X509Certificate.CreateFromSignedFile(file));
-            X509Chain chain = new X509Chain();
-            return chain.Build(cert) && cert.Subject.IndexOf("O=Microsoft Corporation", StringComparison.OrdinalIgnoreCase) >= 0;
-        }
-
-        private void InstallModel()
-        {
-            try
-            {
-                Log("Скачиваю ИИ-фильтр изображений (" + (Release.ModelSize / 1024 / 1024) + " МБ, один раз)…");
-                Downloader.InstallModel(null);
-                Log("ИИ-фильтр установлен.");
-            }
-            catch (Exception ex)
-            {
-                Log("! ИИ-фильтр не скачан: " + ex.Message + ". Можно установить позже в панели администратора (вкладка «ИИ-фильтр»).");
+                Log("! Проверка компонентов: " + ex.Message);
             }
         }
 

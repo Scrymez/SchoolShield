@@ -7,28 +7,104 @@ using System.Windows.Forms;
 
 namespace SchoolShield
 {
+    /// <summary>Volume slider that opens from the dock (instead of "+" and "-" buttons).</summary>
+    internal sealed class VolumeFlyout : Form
+    {
+        private readonly SliderBar slider = new SliderBar();
+        private readonly Button mute = new Button();
+        private readonly Label percent = new Label();
+
+        public VolumeFlyout()
+        {
+            FormBorderStyle = FormBorderStyle.None;
+            ShowInTaskbar = false;
+            TopMost = true;
+            StartPosition = FormStartPosition.Manual;
+            BackColor = Theme.Card;
+            Size = new Size(Metrics.S(330), Metrics.S(62));
+            Padding = new Padding(1);
+
+            mute.FlatStyle = FlatStyle.Flat;
+            mute.FlatAppearance.BorderSize = 0;
+            mute.Font = Theme.IconFont(15);
+            mute.ForeColor = Theme.Text;
+            mute.BackColor = Theme.Card;
+            mute.Cursor = Cursors.Hand;
+            mute.SetBounds(Metrics.S(8), Metrics.S(10), Metrics.S(44), Metrics.S(42));
+            mute.Click += delegate { AudioControl.Muted = !AudioControl.Muted; Sync(); };
+
+            slider.SetBounds(Metrics.S(58), Metrics.S(14), Width - Metrics.S(58) - Metrics.S(66), Metrics.S(34));
+            slider.BackColor = Theme.Card;
+            slider.ValueChanged += delegate
+            {
+                AudioControl.Muted = false;
+                AudioControl.Volume = slider.Value / 100f;
+                UpdateLabels();
+            };
+
+            percent.SetBounds(Width - Metrics.S(62), Metrics.S(10), Metrics.S(54), Metrics.S(42));
+            percent.TextAlign = ContentAlignment.MiddleCenter;
+            percent.Font = Theme.UiFont(12, FontStyle.Bold);
+            percent.ForeColor = Theme.Text;
+
+            Controls.Add(mute);
+            Controls.Add(slider);
+            Controls.Add(percent);
+            Deactivate += delegate { Close(); };
+            Paint += delegate (object s, PaintEventArgs e)
+            {
+                using (Pen p = new Pen(Theme.Accent)) e.Graphics.DrawRectangle(p, 0, 0, Width - 1, Height - 1);
+            };
+        }
+
+        private void Sync()
+        {
+            slider.SetSilently((int)Math.Round(AudioControl.Volume * 100));
+            UpdateLabels();
+        }
+
+        private void UpdateLabels()
+        {
+            bool m = AudioControl.Muted;
+            mute.Text = m || slider.Value == 0 ? "" : "";
+            percent.Text = m ? "—" : slider.Value + "%";
+        }
+
+        public void ShowNear(Control anchor)
+        {
+            Sync();
+            Rectangle a = anchor.RectangleToScreen(anchor.ClientRectangle);
+            Rectangle scr = Screen.PrimaryScreen.Bounds;
+            int x = Math.Max(scr.X, Math.Min(scr.Right - Width, a.Right - Width));
+            Location = new Point(x, scr.Y + Metrics.DockHeight);
+            Show();
+            Activate();
+        }
+    }
+
     /// <summary>
     /// Thin always-on-top strip at the top of the screen. A shell without Explorer has no taskbar or tray,
-    /// so this provides what a student still needs: open windows, language, volume, battery, network, clock.
+    /// so this provides what a student still needs: open windows, language, volume, battery, Wi-Fi, clock.
     /// </summary>
     internal sealed class DockForm : Form
     {
-        public const int BarHeight = 40;
+        public static int BarHeight { get { return Metrics.DockHeight; } }
 
         private readonly MainForm main;
         private readonly Button home = new Button();
         private readonly FlowLayoutPanel tasks = new FlowLayoutPanel();
-        private readonly Panel right = new Panel();
+        private readonly FlowLayoutPanel right = new FlowLayoutPanel();
         private readonly Label admin = new Label();
         private readonly Button lang = new Button();
-        private readonly Button volDown = new Button();
-        private readonly Button volMute = new Button();
-        private readonly Button volUp = new Button();
+        private readonly Button volume = new Button();
         private readonly Label battery = new Label();
-        private readonly Label net = new Label();
+        private readonly Button wifi = new Button();
         private readonly Label clock = new Label();
+        private readonly ToolTip tip = new ToolTip();
         private readonly System.Windows.Forms.Timer timer = new System.Windows.Forms.Timer();
         private string lastSignature = "";
+        private int wifiTick;
+        private VolumeFlyout flyout;
 
         public DockForm(MainForm main)
         {
@@ -41,9 +117,11 @@ namespace SchoolShield
             Rectangle s = Screen.PrimaryScreen.Bounds;
             Bounds = new Rectangle(s.X, s.Y, s.Width, BarHeight);
 
-            home.Text = "  Меню";
+            home.Text = "   " + (Metrics.Tiny ? "" : "Меню");
             home.FlatStyle = FlatStyle.Flat;
             home.FlatAppearance.BorderSize = 0;
+            home.Dock = DockStyle.Left;
+            home.Width = Metrics.Tiny ? Metrics.S(56) : Metrics.S(118);
             home.Click += delegate { main.ShowMenu(); };
 
             tasks.WrapContents = false;
@@ -51,64 +129,79 @@ namespace SchoolShield
             tasks.Dock = DockStyle.Fill;
 
             right.Dock = DockStyle.Right;
-            right.Width = 470;
+            right.AutoSize = true;
+            right.AutoSizeMode = AutoSizeMode.GrowAndShrink;
+            right.WrapContents = false;
+            right.FlowDirection = FlowDirection.LeftToRight;
+            right.Padding = new Padding(0, 0, Metrics.S(8), 0);
 
-            Configure(lang, "RU", 6, 5, 44);
+            int h = BarHeight - Metrics.S(10);
+            Style(lang, "RU", Metrics.S(46), h);
             lang.Click += delegate { InputLang.Toggle(); };
-            Configure(volDown, "", 56, 5, 34);
-            volDown.Click += delegate { Volume(-0.05f); };
-            Configure(volMute, "", 92, 5, 34);
-            volMute.Click += delegate { Mute(); };
-            Configure(volUp, "", 128, 5, 34);
-            volUp.Click += delegate { Volume(0.05f); };
-            volDown.Font = volMute.Font = volUp.Font = Theme.IconFont(12);
-
-            battery.SetBounds(172, 0, 90, BarHeight);
-            net.SetBounds(262, 0, 34, BarHeight);
-            clock.SetBounds(300, 0, 76, BarHeight);
-            admin.SetBounds(380, 6, 86, BarHeight - 12);
-            foreach (Label l in new Label[] { battery, net, clock })
+            Style(volume, "", Metrics.S(42), h);
+            volume.Font = Theme.IconFont(12);
+            volume.MouseUp += delegate (object o, MouseEventArgs e)
             {
-                l.AutoSize = false;
-                l.TextAlign = ContentAlignment.MiddleCenter;
-            }
-            net.Font = Theme.IconFont(13);
+                if (e.Button == MouseButtons.Right) { AudioControl.Muted = !AudioControl.Muted; Tick(); return; }
+                if (flyout != null && !flyout.IsDisposed) { flyout.Close(); flyout = null; return; }
+                flyout = new VolumeFlyout();
+                flyout.FormClosed += delegate { flyout = null; };
+                flyout.ShowNear(volume);
+            };
+            Style(wifi, "", Metrics.S(42), h);
+            wifi.Font = Theme.IconFont(12);
+            wifi.Click += delegate { main.ShowSection("system"); };
+
+            battery.AutoSize = false;
+            battery.Size = new Size(Metrics.S(70), BarHeight);
+            battery.TextAlign = ContentAlignment.MiddleCenter;
             battery.Font = Theme.UiFont(10);
+            battery.Margin = new Padding(0);
+
+            clock.AutoSize = false;
+            clock.Size = new Size(Metrics.S(64), BarHeight);
+            clock.TextAlign = ContentAlignment.MiddleCenter;
             clock.Font = Theme.UiFont(11, FontStyle.Bold);
+            clock.Margin = new Padding(0);
+
             admin.AutoSize = false;
+            admin.Size = new Size(Metrics.S(84), h);
             admin.TextAlign = ContentAlignment.MiddleCenter;
             admin.Font = Theme.UiFont(8.5f, FontStyle.Bold);
             admin.ForeColor = Color.White;
             admin.BackColor = Theme.Danger;
+            admin.Margin = new Padding(0, Metrics.S(5), Metrics.S(6), Metrics.S(5));
             admin.Visible = false;
 
-            right.Controls.AddRange(new Control[] { lang, volDown, volMute, volUp, battery, net, clock, admin });
+            right.Controls.Add(admin);
+            right.Controls.Add(lang);
+            right.Controls.Add(volume);
+            right.Controls.Add(battery);
+            right.Controls.Add(wifi);
+            right.Controls.Add(clock);
 
             // Fill goes first, edges after (WinForms docks the last control first).
             Controls.Add(tasks);
             Controls.Add(right);
             Controls.Add(home);
-            home.Dock = DockStyle.Left;
-            home.Width = 124;
 
             ApplyTheme();
-            ToolTip tip = new ToolTip();
             tip.SetToolTip(lang, "Раскладка клавиатуры");
-            tip.SetToolTip(volDown, "Тише");
-            tip.SetToolTip(volMute, "Выключить звук");
-            tip.SetToolTip(volUp, "Громче");
+            tip.SetToolTip(volume, "Громкость (правая кнопка — выключить звук)");
+            tip.SetToolTip(wifi, "Сеть Wi-Fi");
 
             timer.Interval = 700;
             timer.Tick += delegate { Tick(); };
             Shown += delegate { timer.Start(); Tick(); };
         }
 
-        private void Configure(Button b, string text, int x, int y, int w)
+        private void Style(Button b, string text, int w, int h)
         {
             b.Text = text;
             b.FlatStyle = FlatStyle.Flat;
             b.FlatAppearance.BorderSize = 0;
-            b.SetBounds(x, y, w, BarHeight - 10);
+            b.Size = new Size(w, h);
+            b.Margin = new Padding(0, Metrics.S(5), Metrics.S(6), Metrics.S(5));
             b.Cursor = Cursors.Hand;
         }
 
@@ -120,13 +213,13 @@ namespace SchoolShield
             home.BackColor = Theme.Accent;
             home.ForeColor = Theme.Dark ? Color.FromArgb(7, 12, 24) : Color.White;
             home.Font = Theme.UiFont(10.5f, FontStyle.Bold);
-            foreach (Button b in new Button[] { lang, volDown, volMute, volUp })
+            foreach (Button b in new Button[] { lang, volume, wifi })
             {
                 b.BackColor = Theme.Card;
                 b.ForeColor = Theme.Text;
-                if (b == lang) b.Font = Theme.UiFont(9.5f, FontStyle.Bold);
             }
-            foreach (Label l in new Label[] { battery, net, clock })
+            lang.Font = Theme.UiFont(9.5f, FontStyle.Bold);
+            foreach (Label l in new Label[] { battery, clock })
             {
                 l.BackColor = Theme.Sidebar;
                 l.ForeColor = Theme.Text;
@@ -146,18 +239,6 @@ namespace SchoolShield
             }
         }
 
-        private static void Volume(float delta)
-        {
-            if (!AudioControl.Available) return;
-            AudioControl.Muted = false;
-            AudioControl.Volume = AudioControl.Volume + delta;
-        }
-
-        private static void Mute()
-        {
-            if (AudioControl.Available) AudioControl.Muted = !AudioControl.Muted;
-        }
-
         private void Tick()
         {
             try
@@ -174,14 +255,13 @@ namespace SchoolShield
                 else admin.Visible = false;
 
                 PowerStatus ps = SystemInformation.PowerStatus;
-                if ((ps.BatteryChargeStatus & BatteryChargeStatus.NoSystemBattery) != 0) battery.Text = "";
-                else battery.Text = (ps.PowerLineStatus == PowerLineStatus.Online ? "⚡ " : "") + (int)(ps.BatteryLifePercent * 100) + "%";
+                bool noBattery = (ps.BatteryChargeStatus & BatteryChargeStatus.NoSystemBattery) != 0;
+                battery.Visible = !noBattery;
+                if (!noBattery) battery.Text = (ps.PowerLineStatus == PowerLineStatus.Online ? "⚡ " : "") + (int)(ps.BatteryLifePercent * 100) + "%";
 
-                bool online = NetworkInterface.GetIsNetworkAvailable();
-                net.Text = online ? "" : "";
-                net.ForeColor = online ? Color.FromArgb(74, 222, 128) : Theme.Muted;
+                volume.Text = AudioControl.Available && (AudioControl.Muted || AudioControl.Volume <= 0.001f) ? "" : "";
 
-                volMute.Text = AudioControl.Available && AudioControl.Muted ? "" : "";
+                if ((wifiTick++ % 4) == 0) UpdateWifi();
 
                 // Stay above full-screen windows.
                 Native.SetWindowPos(Handle, Native.HWND_TOPMOST, 0, 0, 0, 0,
@@ -190,6 +270,15 @@ namespace SchoolShield
                 RebuildTasks();
             }
             catch { }
+        }
+
+        private void UpdateWifi()
+        {
+            bool online = NetworkInterface.GetIsNetworkAvailable();
+            WifiNetwork cur = Wifi.Available ? Wifi.Current() : null;
+            wifi.Text = cur != null ? "" : (online ? "" : "");   // wifi / wired / no network
+            wifi.ForeColor = online ? Color.FromArgb(74, 222, 128) : Theme.Muted;
+            tip.SetToolTip(wifi, cur != null ? "Wi-Fi: " + cur.Ssid : (online ? "Сеть подключена" : "Нет сети. Нажмите, чтобы подключиться"));
         }
 
         private void RebuildTasks()
@@ -210,6 +299,7 @@ namespace SchoolShield
             List<Control> old = new List<Control>();
             foreach (Control c in tasks.Controls) old.Add(c);
             foreach (Control c in old) { tasks.Controls.Remove(c); c.Dispose(); }
+            int width = Metrics.Tiny ? Metrics.S(130) : Metrics.Compact ? Metrics.S(160) : Metrics.S(190);
             foreach (WinInfo w in wins)
             {
                 IntPtr handle = w.Handle;
@@ -222,8 +312,8 @@ namespace SchoolShield
                 b.BackColor = handle == fg ? Theme.CardHover : Theme.Card;
                 b.ForeColor = Theme.Text;
                 b.Font = Theme.UiFont(9.5f);
-                b.Size = new Size(190, BarHeight - 10);
-                b.Margin = new Padding(6, 5, 0, 5);
+                b.Size = new Size(width, BarHeight - Metrics.S(10));
+                b.Margin = new Padding(Metrics.S(6), Metrics.S(5), 0, Metrics.S(5));
                 b.Click += delegate { Activate(handle); };
                 tasks.Controls.Add(b);
             }

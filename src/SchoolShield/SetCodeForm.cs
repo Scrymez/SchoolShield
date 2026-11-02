@@ -19,6 +19,8 @@ namespace SchoolShield
         public SetCodeForm()
         {
             Text = "SchoolShield — смена кода администратора";
+            AutoScaleDimensions = new SizeF(96F, 96F);
+            AutoScaleMode = AutoScaleMode.Dpi;
             FormBorderStyle = FormBorderStyle.FixedDialog;
             MaximizeBox = false;
             MinimizeBox = false;

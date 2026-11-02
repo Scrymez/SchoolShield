@@ -258,6 +258,8 @@ namespace SchoolShield
         public UpdateForm()
         {
             Text = "SchoolShield — обновление";
+            AutoScaleDimensions = new SizeF(96F, 96F);
+            AutoScaleMode = AutoScaleMode.Dpi;
             StartPosition = FormStartPosition.CenterScreen;
             TopMost = true;
             ShowInTaskbar = false;

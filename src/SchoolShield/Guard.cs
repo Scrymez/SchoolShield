@@ -24,6 +24,11 @@ namespace SchoolShield
             "shellexperiencehost", "startmenuexperiencehost", "textinputhost", "conhost", "schoolshield"
         };
 
+        public static readonly string[] ExternalBrowsers = new string[] {
+            "chrome", "msedge", "firefox", "browser", "opera", "opera_gx", "brave", "vivaldi", "iexplore", "chromium",
+            "maxthon", "waterfox", "palemoon", "librewolf", "tor", "torbrowser", "amigo", "sputnik", "slimjet"
+        };
+
         private static readonly string[] TempExecutableExt = new string[] {
             ".exe", ".msi", ".msix", ".appx", ".bat", ".cmd", ".ps1", ".vbs", ".scr", ".com", ".jar", ".apk"
         };
@@ -38,6 +43,7 @@ namespace SchoolShield
         private readonly List<FileSystemWatcher> watchers = new List<FileSystemWatcher>();
         private readonly Dictionary<IntPtr, DateTime> closing = new Dictionary<IntPtr, DateTime>();
         private readonly HashSet<IntPtr> stripped = new HashSet<IntPtr>();
+        private readonly HashSet<IntPtr> styledDialogs = new HashSet<IntPtr>();
         private readonly Dictionary<int, bool> pathOk = new Dictionary<int, bool>();
         private readonly int sessionId;
         private readonly uint ownPid;
@@ -53,6 +59,13 @@ namespace SchoolShield
             bad = Config.LoadBadWords();
             blocked = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             foreach (string s in cfg.BlockedProcesses) blocked.Add(s.Trim().ToLowerInvariant().Replace(".exe", ""));
+            foreach (string s in Config.BuiltInBlockedProcesses) blocked.Add(s);
+            if (cfg.Browser.BuiltIn && cfg.Browser.BuiltInOnly && WebView2Probe.Available)
+            {
+                // Ad blur and the site lists live in the built-in browser, so no other browser may run for a student.
+                foreach (string b in ExternalBrowsers) blocked.Add(b);
+                Log.Write("guard", "Внешние браузеры закрываются: работает только встроенный");
+            }
             forbiddenExt = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             foreach (string s in cfg.ForbiddenExtensions) forbiddenExt.Add(s.StartsWith(".") ? s : "." + s);
 
@@ -151,6 +164,40 @@ namespace SchoolShield
             stripped.RemoveWhere(delegate(IntPtr h) { return !present.Contains(h); });
 
             if ((tick++ % 3) == 0) CheckProcesses();
+            StyleDialogs();
+        }
+
+        // ---------------------------------------------------------------- "Save as" / "Open" windows
+
+        /// <summary>
+        /// Common file dialogs are owned windows, so the task list never shows them. Remove their "?" help button (it opens
+        /// a browser) and give them a dark title bar that matches the launcher.
+        /// </summary>
+        private void StyleDialogs()
+        {
+            if (State.Preview) return;
+            Native.EnumWindows(delegate (IntPtr h, IntPtr l)
+            {
+                try
+                {
+                    if (!Native.IsWindowVisible(h) || styledDialogs.Contains(h)) return true;
+                    if (Native.GetWindowClass(h) != "#32770") return true;
+                    if (Native.GetWindowPid(h) == ownPid) return true;
+                    styledDialogs.Add(h);
+                    int ex = Native.GetWindowLong(h, Native.GWL_EXSTYLE);
+                    if ((ex & 0x400 /* WS_EX_CONTEXTHELP */) != 0)
+                    {
+                        Native.SetWindowLong(h, Native.GWL_EXSTYLE, ex & ~0x400);
+                        Native.SetWindowPos(h, IntPtr.Zero, 0, 0, 0, 0, Native.SWP_NOMOVE | Native.SWP_NOSIZE | Native.SWP_NOZORDER | Native.SWP_NOACTIVATE | Native.SWP_FRAMECHANGED);
+                    }
+                    int on = 1;
+                    Native.DwmSetWindowAttribute(h, 20 /* DWMWA_USE_IMMERSIVE_DARK_MODE */, ref on, 4);
+                    Native.DwmSetWindowAttribute(h, 19, ref on, 4);   // the same flag on Windows 10 1809
+                }
+                catch { }
+                return true;
+            }, IntPtr.Zero);
+            if (styledDialogs.Count > 400) styledDialogs.Clear();
         }
 
         // ---------------------------------------------------------------- bad windows

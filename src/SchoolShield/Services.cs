@@ -478,11 +478,16 @@ namespace SchoolShield
         private DateTime heldSince = DateTime.MinValue;
         private bool fired;
 
+        public readonly string Spec;
         public bool Valid { get { return keys.Count >= 2; } }
+
+        /// <summary>How long the whole chord has been held, in ms (0 when it is not fully pressed).</summary>
+        public int HeldMs { get { return heldSince == DateTime.MinValue ? 0 : (int)(DateTime.Now - heldSince).TotalMilliseconds; } }
 
         public Chord(string spec)
         {
-            foreach (string part in (spec ?? "").Split('+'))
+            Spec = spec ?? "";
+            foreach (string part in Spec.Split('+'))
             {
                 string p = part.Trim();
                 if (p.Length == 0) continue;
@@ -503,7 +508,7 @@ namespace SchoolShield
             if (!Valid) return false;
             foreach (int vk in keys)
             {
-                if ((Native.GetAsyncKeyState(vk) & 0x8000) == 0)
+                if (!KeyState.IsDown(vk))
                 {
                     heldSince = DateTime.MinValue;
                     fired = false;
@@ -511,7 +516,7 @@ namespace SchoolShield
                 }
             }
             if (heldSince == DateTime.MinValue) heldSince = DateTime.Now;
-            if (!fired && (DateTime.Now - heldSince).TotalMilliseconds >= holdMs)
+            if (!fired && HeldMs >= holdMs)
             {
                 fired = true;
                 return true;

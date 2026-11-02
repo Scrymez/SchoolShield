@@ -25,6 +25,7 @@ echo "-- launcher"
 dotnet build src/SchoolShield -c Release -o "$DIST/app" -nologo -v q
 echo "-- payload"
 cp "$DIST"/app/*.exe "$DIST"/app/*.exe.config "$DIST"/app/*.dll "$DIST/payload/"
+[ -d "$DIST/app/runtimes" ] && cp -R "$DIST/app/runtimes" "$DIST/payload/runtimes"   # WebView2Loader.dll must stay in runtimes/win-x64/native
 mkdir -p "$DIST/payload/scripts" "$DIST/payload/config" "$DIST/payload/assets"
 cp scripts/*.ps1 "$DIST/payload/scripts/"
 cp config/* "$DIST/payload/config/"

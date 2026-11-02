@@ -28,11 +28,15 @@ namespace SchoolShield
 
         private Panel sidebar, content, host, header;
         private Label titleLabel, bellLabel, clockLabel;
-        private TextBox search;
+        private SearchBox search;
+        private readonly System.Windows.Forms.Timer wifiTimer = new System.Windows.Forms.Timer();
+        private readonly ToolTip sidebarTips = new ToolTip();
         private Section current;
         private bool suppressSearch;
 
-        private Chord chord;
+        private readonly List<Chord> chords = new List<Chord>();
+        private HoldOverlay holdOverlay;
+        private readonly List<DateTime> clockClicks = new List<DateTime>();
         private KeyboardHook hook;
         private Guard guard;
         private AiGuard ai;
@@ -45,6 +49,7 @@ namespace SchoolShield
         public MainForm(Config cfg)
         {
             Cfg = cfg;
+            Metrics.Init();
             User = UserData.Load();
             Theme.Apply(User.Theme != "light");
 
@@ -106,35 +111,32 @@ namespace SchoolShield
 
             header = new Panel();
             header.Dock = DockStyle.Top;
-            header.Height = 92;
-            header.BackColor = Theme.Background;
+            header.Height = Metrics.HeaderHeight;
+            header.BackColor = Theme.Header;
 
             titleLabel = new Label();
-            titleLabel.Font = Theme.UiFont(26, FontStyle.Bold);
+            titleLabel.Font = Theme.UiFont(Metrics.TitlePt, FontStyle.Bold);
             titleLabel.ForeColor = Theme.Text;
-            titleLabel.AutoSize = true;
-            titleLabel.Location = new Point(32, 16);
+            titleLabel.AutoSize = false;
+            titleLabel.AutoEllipsis = true;
+            titleLabel.BackColor = Theme.Header;
 
             bellLabel = new Label();
-            bellLabel.Font = Theme.UiFont(11);
+            bellLabel.Font = Theme.UiFont(Metrics.Compact ? 10 : 11);
             bellLabel.ForeColor = Theme.Muted;
-            bellLabel.AutoSize = true;
-            bellLabel.Location = new Point(36, 62);
+            bellLabel.AutoSize = false;
+            bellLabel.AutoEllipsis = true;
+            bellLabel.BackColor = Theme.Header;
 
             clockLabel = new Label();
-            clockLabel.Font = Theme.UiFont(24, FontStyle.Bold);
+            clockLabel.Font = Theme.UiFont(Metrics.Compact ? 18 : 22, FontStyle.Bold);
             clockLabel.ForeColor = Theme.Accent;
             clockLabel.AutoSize = true;
-            clockLabel.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+            clockLabel.BackColor = Theme.Header;
+            clockLabel.MouseUp += delegate { OnClockClick(); };
 
-            search = new TextBox();
-            search.Font = Theme.UiFont(13);
-            search.BackColor = Theme.Card;
-            search.ForeColor = Theme.Text;
-            search.BorderStyle = BorderStyle.FixedSingle;
-            search.Width = 300;
-            search.Anchor = AnchorStyles.Top | AnchorStyles.Right;
-            search.TextChanged += delegate { OnSearchChanged(); };
+            search = new SearchBox("Поиск программ и файлов…");
+            search.QueryChanged += delegate { OnSearchChanged(); };
 
             header.Controls.Add(titleLabel);
             header.Controls.Add(bellLabel);
@@ -142,12 +144,19 @@ namespace SchoolShield
             header.Controls.Add(search);
             header.Resize += delegate { PlaceHeader(); };
 
+            // thin divider under the header
+            Panel line = new Panel();
+            line.Dock = DockStyle.Top;
+            line.Height = 1;
+            line.BackColor = Theme.Line;
+
             content.Controls.Add(host);
+            content.Controls.Add(line);
             content.Controls.Add(header);
 
             sidebar = new Panel();
             sidebar.Dock = DockStyle.Left;
-            sidebar.Width = 236;
+            sidebar.Width = Metrics.SidebarWidth;
             sidebar.BackColor = Theme.Sidebar;
 
             // Dock.Top stacks in reverse order of adding, so add the last button first.
@@ -157,16 +166,17 @@ namespace SchoolShield
                 SidebarButton b = new SidebarButton(s.Glyph, s.Title);
                 string id = s.Id;
                 b.MouseUp += delegate (object o, MouseEventArgs e) { if (e.Button == MouseButtons.Left) ShowSection(id); };
+                sidebarTips.SetToolTip(b, s.Title);
                 buttons[id] = b;
                 sidebar.Controls.Add(b);
             }
             Label brand = new Label();
-            brand.Text = Cfg.Title;
+            brand.Text = Metrics.Tiny ? "" : Cfg.Title;
             brand.Dock = DockStyle.Top;
-            brand.Height = 76;
+            brand.Height = Metrics.Tiny ? Metrics.S(20) : Metrics.S(72);
             brand.TextAlign = ContentAlignment.MiddleLeft;
-            brand.Padding = new Padding(24, 8, 8, 0);
-            brand.Font = Theme.UiFont(13, FontStyle.Bold);
+            brand.Padding = new Padding(Metrics.S(22), Metrics.S(8), Metrics.S(8), 0);
+            brand.Font = Theme.UiFont(Metrics.Compact ? 11.5f : 13, FontStyle.Bold);
             brand.ForeColor = Theme.Text;
             brand.BackColor = Theme.Sidebar;
             sidebar.Controls.Add(brand);
@@ -176,7 +186,6 @@ namespace SchoolShield
             ResumeLayout();
 
             PlaceHeader();
-            UiKit.SetPlaceholder(search, "Поиск…");
             ShowSection(sections.ContainsKey(openSection) ? openSection : order[0]);
         }
 
@@ -192,12 +201,29 @@ namespace SchoolShield
             order.Add(s.Id);
         }
 
+        /// <summary>Positions the header from its real width: nothing can overlap on a small screen.</summary>
         private void PlaceHeader()
         {
-            if (header == null) return;
-            clockLabel.Location = new Point(header.Width - clockLabel.Width - 32, 14);
-            search.Location = new Point(header.Width - search.Width - 32, 56);
-            bellLabel.MaximumSize = new Size(Math.Max(200, header.Width - 400), 0);
+            if (header == null || header.Width <= 0) return;
+            int pad = Metrics.PagePad;
+            clockLabel.Location = new Point(header.Width - clockLabel.Width - pad, Metrics.S(8));
+
+            int searchW = Math.Max(Metrics.S(170), Math.Min(Metrics.S(340), (int)(header.Width * 0.32)));
+            if (Metrics.Tiny)
+            {
+                // narrow screens: title row, then search and the lesson line below
+                search.SetBounds(pad, Metrics.S(58), header.Width - 2 * pad, Metrics.S(38));
+                titleLabel.SetBounds(pad, Metrics.S(8), Math.Max(100, clockLabel.Left - pad - Metrics.S(8)), Metrics.S(40));
+                bellLabel.SetBounds(pad, Metrics.S(34), Math.Max(100, clockLabel.Left - pad - Metrics.S(8)), Metrics.S(22));
+                bellLabel.Visible = false;
+            }
+            else
+            {
+                search.SetBounds(header.Width - searchW - pad, Metrics.S(50), searchW, Metrics.S(38));
+                titleLabel.SetBounds(pad, Metrics.S(8), Math.Max(100, clockLabel.Left - pad - Metrics.S(12)), Metrics.S(46));
+                bellLabel.Visible = true;
+                bellLabel.SetBounds(pad + 2, Metrics.S(54), Math.Max(100, search.Left - pad - Metrics.S(12)), Metrics.S(26));
+            }
         }
 
         public void ShowSection(string id)
@@ -214,7 +240,7 @@ namespace SchoolShield
             }
             titleLabel.Text = s.Title;
             suppressSearch = true;
-            search.Text = "";
+            search.ClearQuiet();
             suppressSearch = false;
             UpdateHeader();
             s.OnShown();
@@ -223,14 +249,13 @@ namespace SchoolShield
         private void OnSearchChanged()
         {
             if (suppressSearch || current == null) return;
-            string q = search.Text.Trim();
+            string q = search.Query;
             // On pages without a list, searching jumps to the program list.
             if (q.Length > 0 && (current.Id == "home" || current.Id == "system" || current.Id == "web") && sections.ContainsKey("apps"))
             {
                 ShowSection("apps");
                 suppressSearch = true;
-                search.Text = q;
-                search.SelectionStart = q.Length;
+                search.SetQuery(q);
                 suppressSearch = false;
             }
             current.OnSearch(q);
@@ -274,14 +299,14 @@ namespace SchoolShield
             hook = new KeyboardHook();
             hook.Install();   // in preview it blocks nothing
 
-            // The admin chord must be HELD: an accidental press can never open the terminal.
-            chord = new Chord(Cfg.AdminHotkey);
-            if (!chord.Valid) chord = new Chord("Ctrl+Shift+Alt+F12");
+            // The admin chord must be HELD: an accidental press can never open the terminal. Besides the configured chord two
+            // built-in ones always work (Fn keys of some laptops hide F12), so an administrator cannot be locked out.
+            AddChord(Cfg.AdminHotkey);
+            AddChord("Ctrl+Shift+Alt+A");
+            AddChord("Ctrl+Shift+Alt+F12");
+            holdOverlay = new HoldOverlay();
             hotTimer.Interval = 100;
-            hotTimer.Tick += delegate
-            {
-                if (chord.Poll(Math.Max(500, Cfg.AdminHotkeyHoldMs))) ShowAdminConsole();
-            };
+            hotTimer.Tick += delegate { PollAdminChords(); };
             hotTimer.Start();
 
             guard = new Guard(Cfg);
@@ -290,12 +315,64 @@ namespace SchoolShield
 
             ai = new AiGuard(Cfg);
             ai.Alert += delegate (string m) { Ui.Toast(m); };
-            ai.OwnWindowHit += delegate { try { BeginInvoke(new Action(delegate { ShowSection("home"); })); } catch { } };
+            ai.OwnWindowHit += delegate { try { BeginInvoke(new Action(delegate { BlankBrowser(); ShowSection("home"); })); } catch { } };
             ai.Start();
 
             StartInputService();
+            wifiTimer.Interval = 15000;
+            wifiTimer.Tick += delegate
+            {
+                System.Threading.ThreadPool.QueueUserWorkItem(delegate { try { Wifi.Enforce(Cfg); } catch { } });
+            };
+            wifiTimer.Start();
             ReloadCatalog();
             Activate();
+        }
+
+        private void AddChord(string spec)
+        {
+            Chord c = new Chord(spec);
+            if (!c.Valid) return;
+            foreach (Chord x in chords) if (string.Equals(x.Spec, c.Spec, StringComparison.OrdinalIgnoreCase)) return;
+            chords.Add(c);
+        }
+
+        private bool chordLogged;
+
+        private void PollAdminChords()
+        {
+            int need = Math.Max(500, Cfg.AdminHotkeyHoldMs);
+            int best = 0;
+            bool fire = false;
+            foreach (Chord c in chords)
+            {
+                if (c.Poll(need)) fire = true;
+                if (c.HeldMs > best) best = c.HeldMs;
+            }
+            if (best >= 200 && !chordLogged) { chordLogged = true; Log.Write("hotkey", "Админ-комбинация нажата"); }
+            if (best == 0) chordLogged = false;
+            if (best >= 250 && !fire) holdOverlay.SetProgress(Math.Min(1.0, best / (double)need));
+            else holdOverlay.HideNow();
+            if (fire)
+            {
+                Log.Write("hotkey", "Админ-комбинация удержана: открываю терминал");
+                ShowAdminConsole();
+            }
+        }
+
+        /// <summary>7 quick clicks on the clock: an alternative to the keyboard chord.</summary>
+        private void OnClockClick()
+        {
+            if (!Cfg.AdminClickGesture) return;
+            DateTime now = DateTime.Now;
+            clockClicks.Add(now);
+            clockClicks.RemoveAll(delegate (DateTime t) { return (now - t).TotalSeconds > 6; });
+            if (clockClicks.Count >= 7)
+            {
+                clockClicks.Clear();
+                Log.Write("hotkey", "Админ-жест: 7 нажатий на часы");
+                ShowAdminConsole();
+            }
         }
 
         /// <summary>Without Explorer nobody starts ctfmon, and then Alt+Shift / Ctrl+Shift cannot switch the keyboard layout.</summary>
@@ -328,6 +405,8 @@ namespace SchoolShield
             try
             {
                 hotTimer.Stop();
+                wifiTimer.Stop();
+                if (holdOverlay != null) holdOverlay.Dispose();
                 clockTimer.Stop();
                 if (hook != null) hook.Dispose();
                 if (guard != null) guard.Dispose();
@@ -553,12 +632,27 @@ namespace SchoolShield
             {
                 Uri u;
                 if (!Uri.TryCreate(url, UriKind.Absolute, out u) || (u.Scheme != Uri.UriSchemeHttp && u.Scheme != Uri.UriSchemeHttps)) return;
+                Section web;
+                if (sections.TryGetValue("web", out web) && ((WebSection)web).HasBuiltInBrowser)
+                {
+                    ShowSection("web");
+                    ((WebSection)web).Navigate(u.AbsoluteUri);   // goes through the school's site lists
+                    Log.Write("web", u.Host);
+                    return;
+                }
                 ProcessStartInfo psi = new ProcessStartInfo(u.AbsoluteUri);
                 psi.UseShellExecute = true;
                 Process.Start(psi);
                 Log.Write("web", u.Host);
             }
             catch { Ui.Toast("Не удалось открыть сайт."); }
+        }
+
+        /// <summary>The screen filter found something unacceptable in our own window: leave the page.</summary>
+        public void BlankBrowser()
+        {
+            Section web;
+            if (sections.TryGetValue("web", out web)) ((WebSection)web).Blank();
         }
 
         // ------------------------------------------------------------------ power
@@ -649,6 +743,7 @@ namespace SchoolShield
             RestoreWorkArea();
             if (dock != null) dock.Hide();
             Hide();
+            if (!State.Preview) UserPolicy.DialogLock(false);   // the administrator needs drives and menus on the real desktop
             try { Process.Start("explorer.exe"); }
             catch (Exception ex) { Log.Write("admin", "explorer.exe: " + ex.Message); }
         }
@@ -666,6 +761,7 @@ namespace SchoolShield
                     try { if (p.SessionId == me) p.Kill(); } catch { }
                     finally { p.Dispose(); }
                 }
+                if (!State.Preview) UserPolicy.DialogLock(true);
                 Show();
                 if (!State.Preview) ReserveDockArea();
                 if (dock != null) dock.Show();

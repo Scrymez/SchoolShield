@@ -21,7 +21,7 @@ namespace SchoolShield
             BackColor = Theme.Background;
             ForeColor = Theme.Text;
             DoubleBuffered = true;
-            Padding = new Padding(32, 4, 32, 8);
+            Padding = new Padding(Metrics.PagePad, Metrics.S(8), Metrics.PagePad, Metrics.S(8));
         }
 
         public abstract string Id { get; }
@@ -31,12 +31,10 @@ namespace SchoolShield
         public virtual void OnSearch(string query) { }
         public virtual void OnAppsChanged() { }
 
-        protected static Button Chip(string text, bool selected, EventHandler click)
+        protected static PillButton Chip(string text, bool selected, EventHandler click)
         {
-            Button b = UiKit.Flat(text, click);
-            b.BackColor = selected ? Theme.Accent : Theme.Card;
-            b.ForeColor = selected ? (Theme.Dark ? Color.FromArgb(7, 12, 24) : Color.White) : Theme.Text;
-            b.Margin = new Padding(0, 0, 8, 8);
+            PillButton b = new PillButton(text, selected);
+            if (click != null) b.Click += click;
             return b;
         }
     }
@@ -86,8 +84,6 @@ namespace SchoolShield
             g.Margin = new Padding(0, 4, 0, 0);
             root.Controls.Add(g);
 
-            string bell = Bells.Status(Main.Cfg, DateTime.Now);
-            root.Controls.Add(UiKit.Hint(bell ?? Main.Cfg.Subtitle));
 
             root.Controls.Add(UiKit.Heading("Быстрый доступ"));
             FlowLayoutPanel quick = UiKit.Flow();
@@ -159,7 +155,8 @@ namespace SchoolShield
             grid.FlowDirection = FlowDirection.LeftToRight;
 
             chips.Dock = DockStyle.Top;
-            chips.Height = 54;
+            chips.AutoSize = true;
+            chips.AutoSizeMode = AutoSizeMode.GrowAndShrink;
             chips.BackColor = Theme.Background;
             chips.WrapContents = true;
             chips.Padding = new Padding(0, 6, 0, 0);
@@ -269,7 +266,7 @@ namespace SchoolShield
             icons.ColorDepth = ColorDepth.Depth32Bit;
             icons.ImageSize = new Size(32, 32);
             list.LargeImageList = icons;
-            list.TileSize = new Size(440, 56);
+            list.TileSize = new Size(Metrics.S(420), Metrics.S(56));
             list.Columns.Add("Папка", 200);
             list.Columns.Add("Изменён", 120);
             list.ItemActivate += delegate { OpenSelected(); };
@@ -281,7 +278,8 @@ namespace SchoolShield
             status.Font = Theme.UiFont(10.5f);
 
             chips.Dock = DockStyle.Top;
-            chips.Height = 54;
+            chips.AutoSize = true;
+            chips.AutoSizeMode = AutoSizeMode.GrowAndShrink;
             chips.BackColor = Theme.Background;
             chips.Padding = new Padding(0, 6, 0, 0);
 
@@ -443,7 +441,7 @@ namespace SchoolShield
             icons.ColorDepth = ColorDepth.Depth32Bit;
             icons.ImageSize = new Size(32, 32);
             others.LargeImageList = icons;
-            others.TileSize = new Size(440, 56);
+            others.TileSize = new Size(Metrics.S(420), Metrics.S(56));
             others.Columns.Add("Папка", 200);
             others.Columns.Add("Изменён", 120);
             others.ItemActivate += delegate { OpenFrom(others); };
@@ -456,7 +454,8 @@ namespace SchoolShield
             status.Font = Theme.UiFont(10.5f);
 
             chips.Dock = DockStyle.Top;
-            chips.Height = 54;
+            chips.AutoSize = true;
+            chips.AutoSizeMode = AutoSizeMode.GrowAndShrink;
             chips.BackColor = Theme.Background;
             chips.Padding = new Padding(0, 6, 0, 0);
 
@@ -698,7 +697,7 @@ namespace SchoolShield
             icons.ColorDepth = ColorDepth.Depth32Bit;
             icons.ImageSize = new Size(32, 32);
             list.LargeImageList = icons;
-            list.TileSize = new Size(440, 56);
+            list.TileSize = new Size(Metrics.S(420), Metrics.S(56));
             list.MultiSelect = true;
             list.Columns.Add("Размер", 100);
             list.Columns.Add("Изменён", 120);
@@ -1046,9 +1045,19 @@ namespace SchoolShield
     internal sealed class WebSection : Section
     {
         private readonly FlowLayoutPanel root = new FlowLayoutPanel();
+        private readonly BrowserPanel browser;
 
         public WebSection(MainForm main) : base(main)
         {
+            if (main.Cfg.Browser.BuiltIn && WebView2Probe.Available)
+            {
+                // The school's own browser fills the whole page.
+                Padding = new Padding(0);
+                browser = new BrowserPanel(main);
+                Controls.Add(browser);
+                return;
+            }
+
             root.Dock = DockStyle.Fill;
             root.FlowDirection = FlowDirection.TopDown;
             root.WrapContents = false;
@@ -1060,10 +1069,20 @@ namespace SchoolShield
 
         public override string Id { get { return "web"; } }
         public override string Title { get { return "Интернет"; } }
-        public override string Glyph { get { return ""; } }
+        public override string Glyph { get { return "\uE774"; } }
 
-        public override void OnShown() { Rebuild(); }
-        public override void OnAppsChanged() { Rebuild(); }
+        public bool HasBuiltInBrowser { get { return browser != null; } }
+
+        public override void OnShown()
+        {
+            if (browser != null) browser.EnsureStarted();
+            else Rebuild();
+        }
+
+        public override void OnAppsChanged() { if (browser == null) Rebuild(); }
+
+        public void Navigate(string url) { if (browser != null) browser.Navigate(url); }
+        public void Blank() { if (browser != null) browser.Blank(); }
 
         private void Fit()
         {
@@ -1071,6 +1090,7 @@ namespace SchoolShield
             foreach (Control c in root.Controls) c.MaximumSize = new Size(w, 0);
         }
 
+        // Fallback when the WebView2 runtime is missing: external browsers and the list of useful sites.
         private void Rebuild()
         {
             root.SuspendLayout();
@@ -1092,7 +1112,7 @@ namespace SchoolShield
                 foreach (LinkItem l in Main.Cfg.Links)
                 {
                     if (l == null || string.IsNullOrEmpty(l.Url)) continue;
-                    TileControl t = new TileControl(l.Name, "");
+                    TileControl t = new TileControl(l.Name, "\uE774");
                     string url = l.Url;
                     t.Activated += delegate { Main.OpenUrl(url); };
                     links.Controls.Add(t);
@@ -1109,6 +1129,9 @@ namespace SchoolShield
     internal sealed class SystemSection : Section
     {
         private readonly FlowLayoutPanel root = new FlowLayoutPanel();
+        private Label wifiStatus;
+        private FlowLayoutPanel wifiList;
+        private bool wifiBusy;
 
         public SystemSection(MainForm main) : base(main)
         {
@@ -1122,7 +1145,7 @@ namespace SchoolShield
 
         public override string Id { get { return "system"; } }
         public override string Title { get { return "Компьютер"; } }
-        public override string Glyph { get { return ""; } }
+        public override string Glyph { get { return "\uE770"; } }
 
         public override void OnShown() { Rebuild(); }
 
@@ -1133,17 +1156,32 @@ namespace SchoolShield
             foreach (Control c in root.Controls) old.Add(c);
             foreach (Control c in old) { root.Controls.Remove(c); c.Dispose(); }
 
+            // ---- sound: a slider, not +/- buttons
             root.Controls.Add(UiKit.Heading("Звук"));
             if (AudioControl.Available)
             {
-                TrackBar tb = new TrackBar();
-                tb.Minimum = 0;
-                tb.Maximum = 100;
-                tb.TickFrequency = 10;
-                tb.Width = 420;
-                tb.Value = (int)Math.Round(AudioControl.Volume * 100);
-                tb.Scroll += delegate { AudioControl.Volume = tb.Value / 100f; };
-                root.Controls.Add(tb);
+                FlowLayoutPanel row = UiKit.Flow();
+                row.WrapContents = false;
+                SliderBar slider = new SliderBar();
+                slider.Width = Metrics.S(420);
+                slider.BackColor = Theme.Background;
+                slider.SetSilently((int)Math.Round(AudioControl.Volume * 100));
+                Label pct = new Label();
+                pct.AutoSize = false;
+                pct.Size = new Size(Metrics.S(70), Metrics.S(34));
+                pct.TextAlign = ContentAlignment.MiddleLeft;
+                pct.Font = Theme.UiFont(12, FontStyle.Bold);
+                pct.ForeColor = Theme.Text;
+                pct.Text = slider.Value + "%";
+                slider.ValueChanged += delegate
+                {
+                    AudioControl.Muted = false;
+                    AudioControl.Volume = slider.Value / 100f;
+                    pct.Text = slider.Value + "%";
+                };
+                row.Controls.Add(slider);
+                row.Controls.Add(pct);
+                root.Controls.Add(row);
                 CheckBox mute = new CheckBox();
                 mute.Text = "Выключить звук";
                 mute.ForeColor = Theme.Text;
@@ -1154,6 +1192,9 @@ namespace SchoolShield
                 root.Controls.Add(mute);
             }
             else root.Controls.Add(UiKit.Hint("Управление звуком недоступно на этом компьютере."));
+
+            // ---- Wi-Fi
+            BuildWifi();
 
             root.Controls.Add(UiKit.Heading("Оформление"));
             FlowLayoutPanel theme = UiKit.Flow();
@@ -1177,6 +1218,111 @@ namespace SchoolShield
                 root.Controls.Add(power);
             }
             root.ResumeLayout();
+        }
+
+        // ------------------------------------------------------------------ Wi-Fi
+
+        private void BuildWifi()
+        {
+            root.Controls.Add(UiKit.Heading("Сеть Wi-Fi"));
+            if (!Wifi.Available)
+            {
+                root.Controls.Add(UiKit.Hint("Адаптер Wi-Fi не найден. Проводная сеть работает без настройки."));
+                return;
+            }
+            wifiStatus = UiKit.Hint("Поиск сетей…");
+            wifiStatus.Font = Theme.UiFont(11);
+            root.Controls.Add(wifiStatus);
+            wifiList = new FlowLayoutPanel();
+            wifiList.FlowDirection = FlowDirection.TopDown;
+            wifiList.WrapContents = false;
+            wifiList.AutoSize = true;
+            wifiList.AutoSizeMode = AutoSizeMode.GrowAndShrink;
+            wifiList.BackColor = Theme.Background;
+            wifiList.Margin = new Padding(0);
+            root.Controls.Add(wifiList);
+            FlowLayoutPanel btns = UiKit.Flow();
+            btns.Margin = new Padding(0, Metrics.S(6), 0, 0);
+            btns.Controls.Add(UiKit.Flat("Обновить список", delegate { RefreshWifi(true); }));
+            root.Controls.Add(btns);
+            RefreshWifi(true);
+        }
+
+        private void RefreshWifi(bool rescan)
+        {
+            if (wifiBusy || wifiStatus == null) return;
+            wifiBusy = true;
+            wifiStatus.Text = "Поиск сетей…";
+            System.Threading.ThreadPool.QueueUserWorkItem(delegate
+            {
+                List<WifiNetwork> nets = Wifi.Scan(rescan);
+                WifiNetwork cur = Wifi.Current();
+                try { BeginInvoke(new Action(delegate { FillWifi(nets, cur); })); }
+                catch { }
+            });
+        }
+
+        private static string Bars(int q)
+        {
+            return q >= 75 ? "▂▄▆█" : q >= 50 ? "▂▄▆" : q >= 25 ? "▂▄" : "▂";
+        }
+
+        private void FillWifi(List<WifiNetwork> nets, WifiNetwork cur)
+        {
+            wifiBusy = false;
+            if (wifiList == null || wifiList.IsDisposed) return;
+            List<Control> old = new List<Control>();
+            foreach (Control c in wifiList.Controls) old.Add(c);
+            foreach (Control c in old) { wifiList.Controls.Remove(c); c.Dispose(); }
+
+            wifiStatus.Text = cur != null ? "Подключено: " + cur.Ssid + "   " + Bars(cur.Signal) : "Нет подключения к Wi-Fi";
+            if (!Main.Cfg.Wifi.StudentCanConnect)
+            {
+                wifiList.Controls.Add(UiKit.Hint("Выбор сети отключён администратором."));
+                return;
+            }
+
+            int shown = 0;
+            foreach (WifiNetwork n in nets)
+            {
+                if (!n.HasProfile || !Wifi.IsAllowed(Main.Cfg, n.Ssid)) continue;
+                shown++;
+                WifiNetwork net = n;
+                Panel row = new Panel();
+                row.Size = new Size(Math.Min(Metrics.S(560), Math.Max(Metrics.S(300), root.ClientSize.Width - Metrics.S(40))), Metrics.S(56));
+                row.BackColor = Theme.Card;
+                row.Margin = new Padding(0, 0, 0, Metrics.S(8));
+                Label name = new Label();
+                name.Text = n.Ssid + (n.Secured ? "" : "   (открытая)");
+                name.Font = Theme.UiFont(12, n.Connected ? FontStyle.Bold : FontStyle.Regular);
+                name.ForeColor = Theme.Text;
+                name.AutoEllipsis = true;
+                name.SetBounds(Metrics.S(14), Metrics.S(8), row.Width - Metrics.S(250), Metrics.S(22));
+                Label sub = new Label();
+                sub.Text = (n.Connected ? "Подключено   " : "") + Bars(n.Signal);
+                sub.Font = Theme.UiFont(9.5f);
+                sub.ForeColor = n.Connected ? Color.FromArgb(74, 222, 128) : Theme.Muted;
+                sub.SetBounds(Metrics.S(14), Metrics.S(30), row.Width - Metrics.S(250), Metrics.S(20));
+                Button b = n.Connected ? UiKit.Flat("Отключиться", null) : UiKit.Accent("Подключиться", null);
+                b.AutoSize = false;
+                b.SetBounds(row.Width - Metrics.S(170), Metrics.S(9), Metrics.S(156), Metrics.S(38));
+                b.Click += delegate
+                {
+                    if (net.Connected) Wifi.Disconnect();
+                    else if (!Wifi.Connect(net.Profile)) Ui.Toast("Не удалось подключиться к сети.");
+                    System.Windows.Forms.Timer t = new System.Windows.Forms.Timer();
+                    t.Interval = 3500;
+                    t.Tick += delegate { t.Stop(); t.Dispose(); RefreshWifi(false); };
+                    t.Start();
+                    wifiStatus.Text = net.Connected ? "Отключаюсь…" : "Подключаюсь к «" + net.Ssid + "»…";
+                };
+                row.Controls.Add(name);
+                row.Controls.Add(sub);
+                row.Controls.Add(b);
+                wifiList.Controls.Add(row);
+            }
+            if (shown == 0)
+                wifiList.Controls.Add(UiKit.Hint("Сетей из списка школы поблизости нет. Нужна другая сеть — обратитесь к учителю."));
         }
     }
 }

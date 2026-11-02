@@ -82,6 +82,7 @@ namespace SchoolShield
             all.HiddenApps.Clear();
             all.HiddenExact.Clear();
             all.AlwaysShow.Clear();
+            all.Browser.BuiltInOnly = false;   // the Admin panel lists every program
             all.ShowAllInstalled = true;
             all.CategoryRules = cfg.CategoryRules;
             all.AppCategories = cfg.AppCategories;
@@ -100,12 +101,23 @@ namespace SchoolShield
             return OtherId;
         }
 
+        private static readonly System.Text.RegularExpressions.Regex BrowserName = new System.Text.RegularExpressions.Regex(
+            @"(^|[^\p{L}])(chrome|firefox|opera|brave|vivaldi|browser|браузер)([^\p{L}]|$)|microsoft edge|internet explorer",
+            System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.CultureInvariant);
+
+        private static bool IsExternalBrowser(string name)
+        {
+            return BrowserName.IsMatch(name);
+        }
+
         private static bool IsVisible(Config cfg, string name)
         {
+            if (cfg.Browser.BuiltIn && cfg.Browser.BuiltInOnly && WebView2Probe.Available && IsExternalBrowser(name)) return false;
             foreach (string h in cfg.HiddenExact)
                 if (string.Equals(h, name, StringComparison.OrdinalIgnoreCase)) return false;
             foreach (string a in cfg.AlwaysShow)
                 if (string.Equals(a, name, StringComparison.OrdinalIgnoreCase)) return true;
+            if (Config.IsBuiltInHidden(name)) return false;
             foreach (string h in cfg.HiddenApps)
                 if (h.Length > 0 && name.IndexOf(h, StringComparison.OrdinalIgnoreCase) >= 0) return false;
 

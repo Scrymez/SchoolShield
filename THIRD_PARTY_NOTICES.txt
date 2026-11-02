@@ -70,3 +70,10 @@ It uses the following third-party works.
 
 4. Microsoft Visual C++ Redistributable — downloaded from microsoft.com only when ONNX Runtime needs it,
    under Microsoft's own redistributable license terms.
+
+5. Microsoft Edge WebView2 (Microsoft.Web.WebView2 NuGet package and runtime) — Microsoft; the SDK is distributed under the
+   Microsoft WebView2 SDK license. The Evergreen runtime is installed from microsoft.com when it is missing.
+
+6. Block lists — The Block List Project (MIT, https://github.com/blocklistproject/Lists) and StevenBlack/hosts
+   (MIT, https://github.com/StevenBlack/hosts); popularity ranking: Tranco (https://tranco-list.eu).
+   Domain names only; the lists are filtered and re-ordered by tools/update-blocklists.py.

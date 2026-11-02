@@ -94,6 +94,14 @@ Act 'DNS: вернуть автоматическое получение' {
     }
 }
 
+Write-Step '5б. Просмотр дисков для ученика'
+Act 'снять запрет просмотра дисков' {
+    foreach ($drive in [System.IO.DriveInfo]::GetDrives()) {
+        if ($drive.DriveType -eq 'Fixed' -and $drive.IsReady) { & icacls.exe $drive.RootDirectory.FullName /remove:d $studentUser 2>$null | Out-Null }
+    }
+    & icacls.exe (Join-Path $env:SystemDrive 'Users') /remove:d $studentUser 2>$null | Out-Null
+}
+
 Write-Step '6. Пользовательские ограничения в профиле ученика'
 # The launcher wrote these into the student's HKCU on every start; take them out.
 $userValues = @(
@@ -105,7 +113,14 @@ $userValues = @(
     @('Software\Microsoft\Windows\CurrentVersion\Policies\Explorer', 'NoWinKeys'),
     @('Software\Microsoft\Windows\CurrentVersion\Policies\Explorer', 'NoDriveTypeAutoRun'),
     @('Software\Microsoft\Windows\CurrentVersion\Policies\Explorer', 'NoNetConnectDisconnect'),
-    @('Software\Policies\Microsoft\Windows\System', 'DisableCMD')
+    @('Software\Policies\Microsoft\Windows\System', 'DisableCMD'),
+    @('Software\Microsoft\Windows\CurrentVersion\Policies\Explorer', 'NoDrives'),
+    @('Software\Microsoft\Windows\CurrentVersion\Policies\Explorer', 'NoNetHood'),
+    @('Software\Microsoft\Windows\CurrentVersion\Policies\Explorer', 'NoComputersNearMe'),
+    @('Software\Microsoft\Windows\CurrentVersion\Policies\Explorer', 'NoViewContextMenu'),
+    @('Software\Microsoft\Windows\CurrentVersion\Policies\Network', 'NoEntireNetwork'),
+    @('Software\Microsoft\Windows\CurrentVersion\Policies\comdlg32', 'NoPlacesBar'),
+    @('Software\Microsoft\Windows\CurrentVersion\Policies\comdlg32', 'NoFileMru')
 )
 function Clear-UserHive([string]$HiveRoot) {
     foreach ($uv in $userValues) {

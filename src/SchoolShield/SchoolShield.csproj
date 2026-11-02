@@ -10,7 +10,7 @@
     <PlatformTarget>x64</PlatformTarget>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <ApplicationIcon>..\..\assets\schoolshield.ico</ApplicationIcon>
-    <Version>2.0.0</Version>
+    <Version>2.1.0</Version>
     <Authors>Латипов С.А.</Authors>
     <Company>Латипов С.А.</Company>
     <Product>SchoolShield</Product>
@@ -26,6 +26,7 @@
 
   <ItemGroup>
     <Compile Include="..\Shared\*.cs" LinkBase="Shared" />
+    <EmbeddedResource Include="..\..\assets\adblur.js" LogicalName="adblur.js" />
   </ItemGroup>
 
   <ItemGroup>
@@ -38,6 +39,7 @@
     <Reference Include="System.DirectoryServices" />
     <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.3" PrivateAssets="all" />
     <PackageReference Include="Microsoft.ML.OnnxRuntime" Version="1.20.1" />
+    <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.2792.45" />
   </ItemGroup>
 
 </Project>

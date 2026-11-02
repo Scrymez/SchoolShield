@@ -62,6 +62,7 @@ namespace SchoolShield
                     Log.Write("crash", Convert.ToString(e.ExceptionObject));
                 };
 
+                Theme.Apply(UserData.Load().Theme != "light");
                 if (!preview) UserPolicy.Apply(cfg);
 
                 // If the UI dies for any reason, bring it back: a student session must never end up on a blank screen.

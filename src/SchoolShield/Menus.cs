@@ -154,6 +154,8 @@ namespace SchoolShield
         {
             this.path = path;
             Text = "Свойства";
+            AutoScaleDimensions = new SizeF(96F, 96F);
+            AutoScaleMode = AutoScaleMode.Dpi;
             FormBorderStyle = FormBorderStyle.FixedDialog;
             MaximizeBox = false;
             MinimizeBox = false;

@@ -61,9 +61,10 @@ namespace SchoolShield
                 }
                 catch (Exception ex)
                 {
-                    LastError = ex.Message;
+                    string hint = Prerequisites.Hint(ex);
+                    LastError = Prerequisites.Describe(ex) + (hint == null ? "" : "\n" + hint);
                     triedAndFailed = true;
-                    Log.Write("ai", "ИИ-фильтр недоступен: " + ex.Message);
+                    Log.Write("ai", "ИИ-фильтр недоступен: " + LastError);
                     return null;
                 }
             }
@@ -168,8 +169,8 @@ namespace SchoolShield
         public void Start()
         {
             if (!cfg.Ai.Enabled) { Log.Write("ai", "Выключен в настройках"); return; }
-            if (!NsfwEngine.ModelPresent) { Log.Write("ai", "Модель не установлена - ИИ-фильтр экрана не работает"); return; }
-            thread.Start();
+            if (!NsfwEngine.ModelPresent) Log.Write("ai", "Модель не установлена - ИИ-фильтр экрана не работает, пока админ не нажмёт «Исправить» в панели");
+            thread.Start();   // keeps retrying every minute, so a repair takes effect without a reboot
         }
 
         public void Dispose() { stop = true; }
@@ -177,10 +178,19 @@ namespace SchoolShield
         private void Loop()
         {
             NsfwEngine engine = NsfwEngine.TryGet();
-            if (engine == null) return;
             int interval = Math.Max(1000, cfg.Ai.IntervalMs);
             while (!stop)
             {
+                if (engine == null)
+                {
+                    // The administrator may repair the missing files from the Admin panel: pick that up without a reboot.
+                    for (int i = 0; i < 60 && !stop; i++) Thread.Sleep(1000);
+                    if (stop) return;
+                    if (!NsfwEngine.ModelPresent) continue;
+                    NsfwEngine.Reset();
+                    engine = NsfwEngine.TryGet();
+                    continue;
+                }
                 try
                 {
                     if (!State.AdminMode) Scan(engine);

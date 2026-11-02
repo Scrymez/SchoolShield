@@ -151,6 +151,9 @@ namespace SchoolShield
         public static extern void keybd_event(byte vk, byte scan, uint flags, UIntPtr extra);
 
         [DllImport("dwmapi.dll")]
+        public static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int value, int size);
+
+        [DllImport("dwmapi.dll")]
         public static extern int DwmGetWindowAttribute(IntPtr hwnd, int attr, out int value, int size);
 
         [DllImport("kernel32.dll", SetLastError = true)]

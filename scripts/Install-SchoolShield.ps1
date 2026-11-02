@@ -19,13 +19,14 @@
 
 .PARAMETER AdminCode     Код администратора (если не указан - спросит; минимум 8 символов).
 .PARAMETER StudentUser   Имя учётной записи ученика (по умолчанию Student).
-.PARAMETER Dns           YandexCloudflare (по умолчанию) | Yandex | Cloudflare | CleanBrowsing | None
+.PARAMETER Dns           AdGuardFamily (по умолчанию: блокирует рекламу, взрослые сайты, включает SafeSearch) | YandexCloudflare | Yandex | Cloudflare | CleanBrowsing | None
 .PARAMETER WebMode       Filter (по умолчанию: интернет с фильтром) | Whitelist (только сайты из whitelist.txt)
 .PARAMETER Downloads     BlockAll (по умолчанию) | Dangerous | Off - скачивания в браузерах.
 .PARAMETER Usb           block (по умолчанию) | readonly | allow - флешки у ученика.
 .PARAMETER NoShell       Не менять оболочку Windows. Для первой проверки: всё настроено, но рабочий стол остаётся обычным.
 .PARAMETER NoAutoLogon   Не включать автовход ученика.
 .PARAMETER NoDnsFirewall Не создавать правила брандмауэра против обхода DNS.
+.PARAMETER NoDialogLock  Не запрещать ученику просмотр корней дисков (окна «Сохранить как» показывают всё, как в Windows).
 .PARAMETER HardenBoot    Отключить меню автовосстановления Windows при сбоях загрузки.
 .PARAMETER ResetConfig   Перезаписать config.json, badwords.txt и т.д. значениями по умолчанию.
 .PARAMETER NonInteractive Не задавать вопросов (запуск из панели администратора). Код берётся из -AdminCode или переменной SS_ADMIN_CODE;
@@ -36,13 +37,14 @@
 param(
     [string]$AdminCode,
     [string]$StudentUser = 'Student',
-    [ValidateSet('YandexCloudflare', 'Yandex', 'Cloudflare', 'CleanBrowsing', 'None')][string]$Dns = 'YandexCloudflare',
+    [ValidateSet('AdGuardFamily', 'YandexCloudflare', 'Yandex', 'Cloudflare', 'CleanBrowsing', 'None')][string]$Dns = 'AdGuardFamily',
     [ValidateSet('Filter', 'Whitelist')][string]$WebMode = 'Filter',
     [ValidateSet('BlockAll', 'Dangerous', 'Off')][string]$Downloads = 'BlockAll',
     [ValidateSet('block', 'readonly', 'allow')][string]$Usb = 'block',
     [switch]$NoShell,
     [switch]$NoAutoLogon,
     [switch]$NoDnsFirewall,
+    [switch]$NoDialogLock,
     [switch]$HardenBoot,
     [switch]$ResetConfig,
     [switch]$NonInteractive,
@@ -350,15 +352,46 @@ Set-Reg 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\Explorer' 'NoD
 Set-Reg 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System' 'HideFastUserSwitching' 1
 Write-Ok 'Готово.'
 
+# ---------------------------------------------------------------- 5b. file dialogs
+
+Write-Step '5б  Окна «Сохранить как»: запрет обзора дисков для ученика'
+if ($NoDialogLock) {
+    Write-Host '  пропущено (-NoDialogLock)'
+} else {
+    # NTFS "list folder" is denied to the student on drive roots and C:\Users (this folder only, not inherited): programs still
+    # open and save files by full path, but the Save As / Open dialogs show nothing outside the allowed folders.
+    $denyTargets = @()
+    foreach ($drive in [System.IO.DriveInfo]::GetDrives()) {
+        if ($drive.DriveType -eq 'Fixed' -and $drive.IsReady) { $denyTargets += $drive.RootDirectory.FullName }
+    }
+    $denyTargets += (Join-Path $env:SystemDrive 'Users')
+    foreach ($t in ($denyTargets | Select-Object -Unique)) {
+        if ($script:DryRun) { Write-Dry ("icacls {0} /deny {1}:(RD)" -f $t, $StudentUser); continue }
+        try {
+            & icacls.exe $t /deny ("{0}:(RD)" -f $StudentUser) | Out-Null
+            Write-Ok ("Просмотр запрещён: {0}" -f $t)
+        } catch { Write-Warn2 ("{0}: {1}" -f $t, $_.Exception.Message) }
+    }
+}
+
 # ---------------------------------------------------------------- 6. browsers
 
 Write-Step '6/9  Браузеры: Chrome, Edge, Firefox'
-$blocklist = @(Read-DomainList (Join-Path $DataDir 'blocklist.txt'))
-$whitelist = @(Read-DomainList (Join-Path $DataDir 'whitelist.txt'))
-if ($script:DryRun -and $blocklist.Count -eq 0) {
-    $blocklist = @(Read-DomainList (Join-Path (Join-Path $PackageRoot 'config') 'blocklist.txt'))
-    $whitelist = @(Read-DomainList (Join-Path (Join-Path $PackageRoot 'config') 'whitelist.txt'))
+# The lists that ship with the program (refreshed by every update) plus the administrator's own additions.
+$shippedCfg = Join-Path $InstallDir 'config'
+if (-not (Test-Path -LiteralPath $shippedCfg)) { $shippedCfg = Join-Path $PackageRoot 'config' }
+$blocklist = @((Read-DomainList (Join-Path $shippedCfg 'blocklist.txt')) + (Read-DomainList (Join-Path $DataDir 'blocklist.txt'))) |
+    Where-Object { $_ -notmatch '\*' } | Select-Object -Unique
+$whitelist = @((Read-DomainList (Join-Path $shippedCfg 'whitelist.txt')) + (Read-DomainList (Join-Path $DataDir 'whitelist.txt'))) |
+    Where-Object { $_ -notmatch '\*' } | Select-Object -Unique
+# Chrome and Edge accept about 1000 entries in URLBlocklist. The built-in browser reads the full lists itself.
+$policyLimit = 900
+if (@($blocklist).Count -gt $policyLimit) {
+    Write-Warn2 ("В списке {0} сайтов; Chrome/Edge получат первые {1} (встроенный браузер использует все)." -f @($blocklist).Count, $policyLimit)
+    $blocklist = @($blocklist | Select-Object -First $policyLimit)
 }
+$blocklist = @($blocklist)
+$whitelist = @($whitelist)
 
 function Set-ChromiumPolicy {
     param([string]$Root, [bool]$IsEdge)
@@ -409,11 +442,11 @@ Set-Reg ($ff + '\DNSOverHTTPS') 'Enabled' 0
 Set-Reg ($ff + '\DNSOverHTTPS') 'Locked' 1
 Set-Reg $ff 'ExtensionSettings' '{"*":{"installation_mode":"blocked"}}' 'String'
 $ffBlock = @('file:///*')
-foreach ($d in $blocklist) { $ffBlock += ('*://*.' + $d + '/*'); $ffBlock += ('*://' + $d + '/*') }
+foreach ($d in $blocklist) { if ($d -notmatch '/') { $ffBlock += ('*://*.' + $d + '/*') } }   # '*.' also matches the bare domain
 if ($WebMode -eq 'Whitelist') {
     Set-RegList ($ff + '\WebsiteFilter\Block') @('<all_urls>')
     $ffAllow = @()
-    foreach ($d in $whitelist) { $ffAllow += ('*://*.' + $d + '/*'); $ffAllow += ('*://' + $d + '/*') }
+    foreach ($d in $whitelist) { $ffAllow += ('*://*.' + $d + '/*') }
     Set-RegList ($ff + '\WebsiteFilter\Exceptions') $ffAllow
 } else {
     Set-RegList ($ff + '\WebsiteFilter\Block') $ffBlock
@@ -424,12 +457,14 @@ Write-Ok ("Режим интернета: {0}; скачивания: {1}; инк
 
 Write-Step '7/9  Семейный DNS-фильтр'
 $dnsV4 = @{
+    AdGuardFamily    = @('94.140.14.15', '94.140.15.16')
     Yandex           = @('77.88.8.7', '77.88.8.3')
     Cloudflare       = @('1.1.1.3', '1.0.0.3')
     CleanBrowsing    = @('185.228.168.168', '185.228.169.168')
     YandexCloudflare = @('77.88.8.7', '1.1.1.3')
 }
 $dnsV6 = @{
+    AdGuardFamily    = @('2a10:50c0::bad1:ff', '2a10:50c0::bad2:ff')
     Yandex           = @('2a02:6b8::feed:a11', '2a02:6b8:0:1::feed:a11')
     Cloudflare       = @('2606:4700:4700::1113', '2606:4700:4700::1003')
     CleanBrowsing    = @('2a0d:2a00:1::', '2a0d:2a00:2::')

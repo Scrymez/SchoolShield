@@ -1,50 +1,23 @@
 {
   "Title": "Школьный компьютер",
   "Subtitle": "Только для учёбы",
-
   "AdminSalt": "",
   "AdminHash": "",
   "Iterations": 100000,
-  "AdminHotkey": "Ctrl+Shift+Alt+F12",
+  "AdminHotkey": "Ctrl+Shift+Alt+A",
   "AdminModeMinutes": 30,
   "MaxCodeAttempts": 5,
   "LockoutSeconds": 60,
-
   "ShowAllInstalled": true,
   "AllowedApps": [],
-  "HiddenApps": [
-    "uninstall", "удалить", "удаление", "справка", "help", "readme", "release notes",
-    "документация", "documentation", "website", "веб-сайт",
-    "командная строка", "command prompt", "powershell", "windows terminal",
-    "редактор реестра", "registry editor", "диспетчер задач", "task manager",
-    "панель управления", "control panel", "параметры", "settings",
-    "microsoft store", "магазин", "выполнить", "проводник", "file explorer",
-    "services", "службы", "управление компьютером", "computer management",
-    "конфигурация системы", "system configuration", "просмотр событий", "event viewer",
-    "steam", "epic games", "battle.net", "origin", "roblox", "minecraft", "discord"
-  ],
   "CustomApps": [],
-
   "BlockMinimize": true,
   "CloseBadWindows": true,
   "DeleteForbiddenFiles": true,
   "KillBlockedProcesses": true,
   "KillOutsideProgramFiles": true,
-  "BlockedProcesses": [
-    "cmd", "powershell", "powershell_ise", "pwsh", "wt", "regedit", "reg", "taskmgr",
-    "mmc", "msconfig", "control", "systemsettings", "winstore.app", "wscript", "cscript",
-    "mshta", "msiexec", "wsl", "bash", "bitsadmin", "certutil", "wmic", "schtasks", "sc",
-    "net", "net1", "taskkill", "runas", "winget", "onedrivesetup", "explorer", "perfmon",
-    "resmon", "eventvwr", "compmgmt", "diskmgmt", "installutil", "msbuild",
-    "csc", "vbc", "regsvr32", "cmstp", "setup", "install", "installer"
-  ],
-  "ForbiddenExtensions": [
-    ".exe", ".msi", ".msix", ".msixbundle", ".appx", ".appxbundle", ".bat", ".cmd", ".ps1",
-    ".vbs", ".vbe", ".wsf", ".scr", ".com", ".jar", ".apk", ".iso", ".img", ".reg",
-    ".zip", ".rar", ".7z", ".torrent"
-  ],
   "AllowedPaths": [],
   "ExemptUsers": [],
-
-  "UsbMode": "block"
+  "UsbMode": "block",
+  "AdminClickGesture": true
 }

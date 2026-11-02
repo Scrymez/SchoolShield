@@ -18,6 +18,8 @@ namespace SchoolShield
         public ScriptRunDialog(string title)
         {
             Text = title;
+            AutoScaleDimensions = new SizeF(96F, 96F);
+            AutoScaleMode = AutoScaleMode.Dpi;
             StartPosition = FormStartPosition.CenterParent;
             ClientSize = new Size(820, 520);
             BackColor = Theme.Background;
@@ -111,6 +113,20 @@ namespace SchoolShield
             d.ShowDialog(owner);
         }
 
+        /// <summary>Runs work on a background thread and streams its lines into the window.</summary>
+        public static void RunWork(IWin32Window owner, string title, Func<Action<string>, bool> work)
+        {
+            ScriptRunDialog d = new ScriptRunDialog(title);
+            System.Threading.ThreadPool.QueueUserWorkItem(delegate
+            {
+                bool ok = false;
+                try { ok = work(d.Append); }
+                catch (Exception ex) { d.Append("! " + ex.Message); }
+                d.Finished(ok ? 0 : 1);
+            });
+            d.ShowDialog(owner);
+        }
+
         private static int SafeExit(Process p)
         {
             try { return p.ExitCode; } catch { return -1; }
@@ -138,6 +154,8 @@ namespace SchoolShield
         {
             this.cfg = cfg;
             Text = alreadyConfigured ? "Применить защиту заново" : "Первый запуск: включение защиты";
+            AutoScaleDimensions = new SizeF(96F, 96F);
+            AutoScaleMode = AutoScaleMode.Dpi;
             StartPosition = FormStartPosition.CenterParent;
             FormBorderStyle = FormBorderStyle.FixedDialog;
             MaximizeBox = false;
@@ -184,8 +202,8 @@ namespace SchoolShield
             student.SetBounds(20, y, 290, 28); student.Text = cfg.Install.StudentUser; Style(student); Controls.Add(student);
             y += 40;
 
-            AddLabel("Фильтр DNS", y); AddLabel("Интернет", y, 330); y += 24;
-            Combo(dns, 20, y, 290, new string[] { "YandexCloudflare", "Yandex", "Cloudflare", "CleanBrowsing", "None" }, cfg.Install.Dns);
+            AddLabel("Фильтр DNS (AdGuardFamily: без рекламы и взрослых сайтов)", y); AddLabel("Интернет", y, 330); y += 24;
+            Combo(dns, 20, y, 290, new string[] { "AdGuardFamily", "YandexCloudflare", "Yandex", "Cloudflare", "CleanBrowsing", "None" }, cfg.Install.Dns);
             Combo(web, 330, y, 290, new string[] { "Filter", "Whitelist" }, cfg.Install.WebMode);
             y += 40;
 
@@ -200,9 +218,9 @@ namespace SchoolShield
             autologon.Location = new Point(20, y);
             Controls.Add(autologon); y += 30;
 
-            aiModel.Text = "Скачать локальный ИИ-фильтр изображений (23 МБ, бесплатно, работает без интернета)";
-            aiModel.Checked = !NsfwEngine.ModelPresent;
-            aiModel.Enabled = !NsfwEngine.ModelPresent;
+            aiModel.Text = "Докачать недостающее для ИИ-фильтра и браузера (Visual C++, WebView2, модель 23 МБ; нужен интернет)";
+            aiModel.Checked = true;
+            aiModel.Enabled = true;
             aiModel.AutoSize = true;
             aiModel.Location = new Point(20, y);
             Controls.Add(aiModel); y += 30;
@@ -312,14 +330,12 @@ namespace SchoolShield
             {
                 if (downloadModel)
                 {
-                    output("Скачиваю ИИ-фильтр (" + FileIndex.Size(Release.ModelSize) + ")…");
                     try
                     {
-                        Downloader.InstallModel(null);
+                        Prerequisites.Repair(AppInfo.InstallDir, delegate (string l) { output(l); });
                         NsfwEngine.Reset();
-                        output("ИИ-фильтр установлен.");
                     }
-                    catch (Exception ex) { output("! ИИ-фильтр не установлен: " + ex.Message + " (можно повторить позже на вкладке «ИИ-фильтр»)"); }
+                    catch (Exception ex) { output("! Компоненты не установлены: " + ex.Message + " (можно повторить на вкладке «ИИ-фильтр»)"); }
                 }
                 return Protection.StartApply(cfg.Install, cfg.UsbMode, code, shellless, output);
             });
@@ -346,6 +362,8 @@ namespace SchoolShield
         {
             this.cfg = cfg;
             Text = "SchoolShield — панель администратора";
+            AutoScaleDimensions = new SizeF(96F, 96F);
+            AutoScaleMode = AutoScaleMode.Dpi;
             StartPosition = FormStartPosition.CenterScreen;
             ClientSize = new Size(1100, 720);
             MinimumSize = new Size(960, 640);
@@ -367,6 +385,7 @@ namespace SchoolShield
             Add("apps", "Программы", BuildApps);
             Add("lists", "Сайты и слова", BuildLists);
             Add("ai", "ИИ-фильтр", BuildAi);
+            Add("wifi", "Wi-Fi", BuildWifi);
             Add("update", "Обновления", delegate { return new UpdatePanel(null, true); });
             Add("settings", "Настройки", BuildSettings);
             Add("log", "Журнал", BuildLog);
@@ -387,6 +406,7 @@ namespace SchoolShield
             Shown += delegate
             {
                 if (!Protection.Configured()) OpenWizard();
+                AutoRepair();
             };
         }
 
@@ -431,6 +451,37 @@ namespace SchoolShield
         private static IEnumerable<Control> Ctl(Control c)
         {
             foreach (Control x in c.Controls) yield return x;
+        }
+
+        /// <summary>Opening the panel quietly downloads whatever the AI filter or the browser is missing (needs internet).</summary>
+        private void AutoRepair()
+        {
+            bool missing = false;
+            foreach (PrereqItem it in Prerequisites.Check(AppInfo.InstallDir)) if (!it.Ok) missing = true;
+            if (!missing) return;
+            Label note = new Label();
+            note.Text = "Докачиваю недостающие\nкомпоненты…";
+            note.Dock = DockStyle.Bottom;
+            note.Height = 56;
+            note.Padding = new Padding(16, 6, 6, 6);
+            note.ForeColor = Theme.Muted;
+            note.BackColor = Theme.Sidebar;
+            nav.Controls.Add(note);
+            System.Threading.ThreadPool.QueueUserWorkItem(delegate
+            {
+                bool ok = false;
+                try { ok = Prerequisites.Repair(AppInfo.InstallDir, delegate (string l) { Log.Write("prereq", l); }); NsfwEngine.Reset(); }
+                catch (Exception ex) { Log.Write("prereq", "Ошибка: " + ex.Message); }
+                try
+                {
+                    BeginInvoke(new Action(delegate
+                    {
+                        note.Text = ok ? "Компоненты установлены." : "Не всё удалось докачать.\nСм. вкладку «ИИ-фильтр».";
+                        Show2(currentId ?? "status");
+                    }));
+                }
+                catch { }
+            });
         }
 
         private void OpenWizard()
@@ -537,7 +588,10 @@ namespace SchoolShield
             Row(p, ref y, "Оболочка Windows", Protection.ShellRegistered() ? "лаунчер SchoolShield (включено)" : "обычный проводник (защита выключена)", Protection.ShellRegistered());
             Row(p, ref y, "Учётная запись ученика", student + (Protection.StudentExists(student) ? " — создана" : " — не создана"), Protection.StudentExists(student));
             Row(p, ref y, "Запрет установки и запуска (SRP)", Protection.SrpPresent() ? "включён" : "выключен", Protection.SrpPresent());
-            Row(p, ref y, "ИИ-фильтр изображений", NsfwEngine.ModelPresent ? "модель установлена" : "модель не установлена (вкладка «ИИ-фильтр»)", NsfwEngine.ModelPresent);
+            List<PrereqItem> pre = Prerequisites.Check(AppInfo.InstallDir);
+            List<string> missing = new List<string>();
+            foreach (PrereqItem it in pre) if (!it.Ok) missing.Add(it.Name);
+            Row(p, ref y, "ИИ-фильтр и браузер", missing.Count == 0 ? "всё необходимое установлено" : "не хватает: " + string.Join("; ", missing.ToArray()) + " — вкладка «ИИ-фильтр» → «Исправить»", missing.Count == 0);
             Row(p, ref y, "Горячая клавиша админа", cfg.AdminHotkey + " — удерживать " + (cfg.AdminHotkeyHoldMs / 1000.0).ToString("0.0", CultureInfo.CurrentCulture) + " с", true);
             Row(p, ref y, "Папка настроек и журнала", Config.DataDir, true);
             y += 14;
@@ -733,40 +787,55 @@ namespace SchoolShield
         private Control BuildAi()
         {
             Panel p = new Panel();
+            p.AutoScroll = true;
             int y = 0;
-            Lbl(p, "Локальный ИИ-фильтр изображений: Yahoo open_nsfw (лицензия BSD-2), ONNX Runtime. Работает на процессоре,", 0, y, 900, true); y += 24;
+            Lbl(p, "Локальный ИИ-фильтр изображений: Yahoo open_nsfw (лицензия BSD-2) и ONNX Runtime. Работает на процессоре,", 0, y, 900, true); y += 24;
             Lbl(p, "ничего не отправляет в интернет. Проверяет экран ученика и скрывает неприемлемые картинки в галерее.", 0, y, 900, true); y += 40;
 
-            Label state = Lbl(p, "", 0, y, 900, false);
-            Action refresh = delegate
+            Lbl(p, "Что нужно для работы (проверяется и докачивается автоматически):", 0, y, 800, false); y += 30;
+            List<Label> marks = new List<Label>();
+            foreach (PrereqItem it in Prerequisites.Check(AppInfo.InstallDir))
             {
-                state.Text = "Модель: " + (NsfwEngine.ModelPresent ? "установлена (" + FileIndex.Size(new FileInfo(Release.ModelPath).Length) + ")" : "НЕ установлена");
-            };
-            refresh();
-            y += 36;
-            Button install = Btn(p, "Скачать и установить модель", 0, y, 300, true, null);
-            install.Click += delegate
+                Label l = Lbl(p, (it.Ok ? "✔  " : "✘  ") + it.Name + " — " + it.Detail, 12, y, 900, false);
+                l.ForeColor = it.Ok ? Color.FromArgb(74, 222, 128) : Color.FromArgb(248, 113, 113);
+                marks.Add(l);
+                y += 28;
+            }
+            y += 8;
+            Btn(p, "Исправить: скачать и установить недостающее", 0, y, 380, true, delegate
             {
-                install.Enabled = false;
-                install.Text = "Скачиваю…";
-                System.Threading.ThreadPool.QueueUserWorkItem(delegate
+                ScriptRunDialog.RunWork(this, "Установка компонентов", delegate (Action<string> log)
                 {
-                    string err = null;
-                    try { Downloader.InstallModel(null); NsfwEngine.Reset(); } catch (Exception ex) { err = ex.Message; }
-                    try
-                    {
-                        BeginInvoke(new Action(delegate
-                        {
-                            install.Enabled = true;
-                            install.Text = "Скачать и установить модель";
-                            refresh();
-                            MessageBox.Show(this, err == null ? "Модель установлена." : "Ошибка: " + err, "ИИ-фильтр");
-                        }));
-                    }
-                    catch { }
+                    bool ok = Prerequisites.Repair(AppInfo.InstallDir, log);
+                    NsfwEngine.Reset();
+                    return ok;
                 });
-            };
-            Btn(p, "Проверить картинку…", 316, y, 260, false, delegate
+                Show2("ai");
+            });
+            Btn(p, "Проверить запуск ИИ", 396, y, 260, false, delegate
+            {
+                NsfwEngine.Reset();
+                NsfwEngine e = NsfwEngine.TryGet();
+                if (e == null)
+                {
+                    MessageBox.Show(this, "ИИ-фильтр не запускается.\n\n" + NsfwEngine.LastError + "\n\nНажмите «Исправить». Подробности в журнале.", "ИИ-фильтр");
+                    return;
+                }
+                try
+                {
+                    System.Diagnostics.Stopwatch sw = System.Diagnostics.Stopwatch.StartNew();
+                    using (System.Drawing.Bitmap bmp = new System.Drawing.Bitmap(224, 224))
+                    {
+                        using (System.Drawing.Graphics g = System.Drawing.Graphics.FromImage(bmp)) g.Clear(System.Drawing.Color.Gray);
+                        e.Score(bmp);
+                    }
+                    MessageBox.Show(this, "ИИ-фильтр работает. Проверка одного кадра: " + sw.ElapsedMilliseconds + " мс.", "ИИ-фильтр");
+                }
+                catch (Exception ex) { MessageBox.Show(this, "Ошибка при проверке: " + Prerequisites.Describe(ex), "ИИ-фильтр"); }
+            });
+            y += 60;
+
+            Btn(p, "Проверить картинку…", 0, y, 260, false, delegate
             {
                 using (OpenFileDialog ofd = new OpenFileDialog())
                 {
@@ -776,14 +845,14 @@ namespace SchoolShield
                     if (e == null) { MessageBox.Show(this, "ИИ-фильтр недоступен: " + NsfwEngine.LastError, "ИИ-фильтр"); return; }
                     try
                     {
-                        double s = e.ScoreFile(ofd.FileName);
-                        MessageBox.Show(this, "Вероятность неприемлемого содержимого: " + (s * 100).ToString("0.0") + "%\n"
-                            + (s >= cfg.Ai.Threshold ? "Картинка была бы ЗАБЛОКИРОВАНА." : "Картинка была бы показана."), "Результат");
+                        double sc = e.ScoreFile(ofd.FileName);
+                        MessageBox.Show(this, "Вероятность неприемлемого содержимого: " + (sc * 100).ToString("0.0") + "%\n"
+                            + (sc >= cfg.Ai.Threshold ? "Картинка была бы ЗАБЛОКИРОВАНА." : "Картинка была бы показана."), "Результат");
                     }
                     catch (Exception ex) { MessageBox.Show(this, "Не удалось проверить: " + ex.Message, "ИИ-фильтр"); }
                 }
             });
-            y += 64;
+            y += 56;
 
             CheckBox enabled = Chk(p, "Включить ИИ-фильтр экрана и галереи", 0, y, cfg.Ai.Enabled); y += 32;
             CheckBox tiles = Chk(p, "Дополнительно проверять четверти экрана (находит мелкие картинки, но нагружает процессор)", 0, y, cfg.Ai.Tiles); y += 32;
@@ -809,6 +878,111 @@ namespace SchoolShield
                 cfg.Ai.IntervalMs = (int)iv.Value;
                 SaveConfig();
             });
+            return p;
+        }
+
+        // ---------------------------------------------------------------- Wi-Fi
+
+        private Control BuildWifi()
+        {
+            Panel p = new Panel();
+            if (!Wifi.Available)
+            {
+                Lbl(p, "На этом компьютере нет адаптера Wi-Fi (или служба WLAN отключена). Проводная сеть настраивать не нужно.", 0, 0, 900, true);
+                return p;
+            }
+            Lbl(p, "Ученики видят и могут включать только сети из этого списка. Пароль хранит Windows (в зашифрованном виде), ученик его не видит.", 0, 0, 900, true);
+            Lbl(p, "Так телефон-«точка доступа» не поможет обойти фильтры.", 0, 22, 900, true);
+
+            ListView list = new ListView();
+            list.SetBounds(0, 56, 840, 330);
+            list.View = View.Details;
+            list.FullRowSelect = true;
+            list.HideSelection = false;
+            list.MultiSelect = false;
+            list.BackColor = Theme.Card;
+            list.ForeColor = Theme.Text;
+            list.BorderStyle = BorderStyle.None;
+            list.Columns.Add("Сеть", 300);
+            list.Columns.Add("Сигнал", 80);
+            list.Columns.Add("Защита", 90);
+            list.Columns.Add("Сохранена", 100);
+            list.Columns.Add("Разрешена ученикам", 220);
+            p.Controls.Add(list);
+
+            Action refresh = null;
+            Action<bool> fill = delegate (bool rescan)
+            {
+                list.Items.Clear();
+                List<WifiNetwork> nets = Wifi.Scan(rescan);
+                HashSet<string> seen = new HashSet<string>();
+                foreach (WifiNetwork n in nets)
+                {
+                    seen.Add(n.Ssid);
+                    ListViewItem it = new ListViewItem(n.Ssid + (n.Connected ? "  (подключено)" : ""));
+                    it.SubItems.Add(n.Signal + "%");
+                    it.SubItems.Add(n.Secured ? "пароль" : "открытая");
+                    it.SubItems.Add(n.HasProfile ? "да" : "нет");
+                    it.SubItems.Add(cfg.Wifi.AllowedSsids.Contains(n.Ssid) ? "да" : (cfg.Wifi.AllowedSsids.Count == 0 && n.HasProfile ? "да (список пуст — все сохранённые)" : "нет"));
+                    it.Tag = n.Ssid;
+                    list.Items.Add(it);
+                }
+                foreach (string prof in Wifi.Profiles())
+                {
+                    if (seen.Contains(prof)) continue;
+                    ListViewItem it = new ListViewItem(prof + "  (вне зоны)");
+                    it.SubItems.Add("—");
+                    it.SubItems.Add("?");
+                    it.SubItems.Add("да");
+                    it.SubItems.Add(cfg.Wifi.AllowedSsids.Contains(prof) || cfg.Wifi.AllowedSsids.Count == 0 ? "да" : "нет");
+                    it.Tag = prof;
+                    list.Items.Add(it);
+                }
+            };
+            refresh = delegate { fill(true); };
+
+            Btn(p, "Обновить список", 0, 400, 200, false, delegate { fill(true); });
+            Btn(p, "Добавить / изменить сеть…", 216, 400, 260, true, delegate
+            {
+                string ssid = list.SelectedItems.Count > 0 ? ((string)list.SelectedItems[0].Tag) : "";
+                using (WifiAddDialog d = new WifiAddDialog(ssid))
+                {
+                    if (d.ShowDialog(this) != DialogResult.OK) return;
+                    string err;
+                    if (!Wifi.AddProfile(d.Ssid, d.Password, d.Security, out err)) { MessageBox.Show(this, err, "Wi-Fi"); return; }
+                    if (!cfg.Wifi.AllowedSsids.Contains(d.Ssid)) cfg.Wifi.AllowedSsids.Add(d.Ssid);
+                    try { cfg.Save(); } catch (Exception ex) { MessageBox.Show(this, ex.Message); }
+                    fill(false);
+                }
+            });
+            Btn(p, "Разрешить / запретить ученикам", 492, 400, 300, false, delegate
+            {
+                if (list.SelectedItems.Count == 0) return;
+                string ssid = (string)list.SelectedItems[0].Tag;
+                if (cfg.Wifi.AllowedSsids.Contains(ssid)) cfg.Wifi.AllowedSsids.Remove(ssid); else cfg.Wifi.AllowedSsids.Add(ssid);
+                try { cfg.Save(); } catch (Exception ex) { MessageBox.Show(this, ex.Message); }
+                fill(false);
+            });
+            Btn(p, "Удалить сохранённую сеть", 0, 450, 260, false, delegate
+            {
+                if (list.SelectedItems.Count == 0) return;
+                string ssid = (string)list.SelectedItems[0].Tag;
+                if (MessageBox.Show(this, "Удалить сеть «" + ssid + "» из Windows?", "Wi-Fi", MessageBoxButtons.YesNo) != DialogResult.Yes) return;
+                Wifi.DeleteProfile(ssid);
+                cfg.Wifi.AllowedSsids.Remove(ssid);
+                try { cfg.Save(); } catch { }
+                fill(false);
+            });
+
+            CheckBox canConnect = Chk(p, "Ученики могут переключаться между разрешёнными сетями", 0, 506, cfg.Wifi.StudentCanConnect);
+            CheckBox enforce = Chk(p, "Отключать компьютер от сетей, которых нет в списке (если список не пуст)", 0, 534, cfg.Wifi.Enforce);
+            Btn(p, "Сохранить", 0, 572, 200, true, delegate
+            {
+                cfg.Wifi.StudentCanConnect = canConnect.Checked;
+                cfg.Wifi.Enforce = enforce.Checked;
+                SaveConfig();
+            });
+            fill(true);
             return p;
         }
 
@@ -855,6 +1029,13 @@ namespace SchoolShield
             CheckBox bad = Chk(p, "Закрывать окна с запрещёнными словами", 0, y, cfg.CloseBadWindows); y += 28;
             CheckBox dl = Chk(p, "Удалять скачанные установщики и архивы", 0, y, cfg.DeleteForbiddenFiles); y += 40;
 
+            Lbl(p, "Встроенный браузер и реклама", 0, y, 400, true); y += 26;
+            CheckBox bOnly = Chk(p, "Ученики выходят в интернет только через встроенный браузер (Chrome, Edge, Firefox закрываются)", 0, y, cfg.Browser.BuiltInOnly); y += 28;
+            CheckBox bBlur = Chk(p, "Размывать всю рекламу на сайтах (ученик не может отключить)", 0, y, cfg.Browser.AdBlur); y += 28;
+            CheckBox bAds = Chk(p, "Блокировать рекламные сети (кроме YouTube, RuTube и VK Видео)", 0, y, cfg.Browser.BlockAdNetworks); y += 28;
+            CheckBox bDl = Chk(p, "Разрешить скачивание файлов во встроенном браузере", 0, y, cfg.Browser.AllowDownloads); y += 28;
+            CheckBox gesture = Chk(p, "Терминал админа открывается и по 7 быстрым нажатиям на часы", 0, y, cfg.AdminClickGesture); y += 40;
+
             Lbl(p, "Разделы лаунчера", 0, y, 300, true); y += 26;
             string[][] secs = new string[][] {
                 new string[] { "home", "Главная" }, new string[] { "apps", "Программы" }, new string[] { "docs", "Документы" },
@@ -894,6 +1075,11 @@ namespace SchoolShield
                 cfg.BlockMinimize = minim.Checked;
                 cfg.CloseBadWindows = bad.Checked;
                 cfg.DeleteForbiddenFiles = dl.Checked;
+                cfg.Browser.BuiltInOnly = bOnly.Checked;
+                cfg.Browser.AdBlur = bBlur.Checked;
+                cfg.Browser.BlockAdNetworks = bAds.Checked;
+                cfg.Browser.AllowDownloads = bDl.Checked;
+                cfg.AdminClickGesture = gesture.Checked;
                 cfg.Sections.Clear();
                 foreach (CheckBox c in secBoxes) if (c.Checked) cfg.Sections.Add((string)c.Tag);
                 if (cfg.Sections.Count == 0) cfg.Sections.Add("home");
@@ -1021,6 +1207,56 @@ namespace SchoolShield
                 try { Process.Start(Release.SiteUrl); } catch { }
             });
             return p;
+        }
+    }
+
+    /// <summary>Network name, password and security type for a new Wi-Fi profile.</summary>
+    internal sealed class WifiAddDialog : Form
+    {
+        private readonly TextBox ssid = new TextBox();
+        private readonly TextBox pass = new TextBox();
+        private readonly ComboBox sec = new ComboBox();
+
+        public string Ssid { get { return ssid.Text.Trim(); } }
+        public string Password { get { return pass.Text; } }
+        public string Security { get { return (string)sec.SelectedItem; } }
+
+        public WifiAddDialog(string suggested)
+        {
+            Text = "Сеть Wi-Fi";
+            AutoScaleDimensions = new SizeF(96F, 96F);
+            AutoScaleMode = AutoScaleMode.Dpi;
+            StartPosition = FormStartPosition.CenterParent;
+            FormBorderStyle = FormBorderStyle.FixedDialog;
+            MaximizeBox = false;
+            MinimizeBox = false;
+            ShowInTaskbar = false;
+            ClientSize = new Size(420, 260);
+            BackColor = Theme.Background;
+            ForeColor = Theme.Text;
+            Font = Theme.UiFont(10.5f);
+
+            Label l1 = new Label(); l1.Text = "Название сети (SSID)"; l1.SetBounds(16, 14, 380, 22); l1.ForeColor = Theme.Muted;
+            ssid.SetBounds(16, 38, 388, 28); ssid.Text = suggested ?? "";
+            Label l2 = new Label(); l2.Text = "Пароль"; l2.SetBounds(16, 74, 380, 22); l2.ForeColor = Theme.Muted;
+            pass.SetBounds(16, 98, 388, 28); pass.UseSystemPasswordChar = true;
+            Label l3 = new Label(); l3.Text = "Защита"; l3.SetBounds(16, 134, 380, 22); l3.ForeColor = Theme.Muted;
+            sec.SetBounds(16, 158, 388, 28); sec.DropDownStyle = ComboBoxStyle.DropDownList;
+            sec.Items.AddRange(new object[] { "WPA2", "WPA3", "Open" }); sec.SelectedIndex = 0;
+            foreach (TextBox t in new TextBox[] { ssid, pass }) { t.BackColor = Theme.Card; t.ForeColor = Theme.Text; t.BorderStyle = BorderStyle.FixedSingle; }
+
+            Button ok = UiKit.Accent("Сохранить", delegate { });
+            ok.AutoSize = false; ok.SetBounds(16, 206, 190, 40);
+            ok.Click += delegate
+            {
+                if (Ssid.Length == 0 || (Security != "Open" && Password.Length < 8)) { MessageBox.Show(this, "Укажите название сети и пароль (не короче 8 символов).", "Wi-Fi"); return; }
+                DialogResult = DialogResult.OK;
+                Close();
+            };
+            Button cancel = UiKit.Flat("Отмена", delegate { DialogResult = DialogResult.Cancel; Close(); });
+            cancel.AutoSize = false; cancel.SetBounds(214, 206, 190, 40);
+            Controls.AddRange(new Control[] { l1, ssid, l2, pass, l3, sec, ok, cancel });
+            CancelButton = cancel;
         }
     }
 }

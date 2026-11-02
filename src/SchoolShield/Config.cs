@@ -65,10 +65,32 @@ namespace SchoolShield
         public bool HideInGallery = true;   // hide flagged pictures in the launcher gallery
     }
 
+    /// <summary>Built-in browser (WebView2): the only place where ads can be blurred for sure.</summary>
+    public class BrowserSettings
+    {
+        public bool BuiltIn = true;               // students browse in the launcher's own browser
+        public bool BuiltInOnly = true;           // Chrome/Edge/Firefox/... are hidden and closed (when WebView2 is available)
+        public bool AdBlur = true;                // blur all ads; students cannot switch it off
+        public bool BlockAdNetworks = true;       // block requests to ad networks (not on YouTube / RuTube / VK Video)
+        public bool AllowDownloads = false;
+        public bool BlockIpAddresses = true;      // http://1.2.3.4/ cannot be used to get around the lists
+        public string HomePage = "start";         // "start" = own start page with useful sites, or a full URL
+        public string SearchUrl = "https://yandex.ru/search/?text={0}&fyandex=1";
+        // Sites where ads INSIDE the video player are left alone (everything else on them is still blurred).
+        public List<string> VideoSites = new List<string>();
+    }
+
+    public class WifiSettings
+    {
+        public bool StudentCanConnect = true;                          // students may switch between saved networks
+        public bool Enforce = true;                                    // disconnect from networks that are not allowed
+        public List<string> AllowedSsids = new List<string>();         // empty = every network the administrator saved
+    }
+
     public class InstallOptions
     {
         public string StudentUser = "Student";
-        public string Dns = "YandexCloudflare";
+        public string Dns = "AdGuardFamily";
         public string WebMode = "Filter";
         public string Downloads = "BlockAll";
         public bool AutoLogon = true;
@@ -89,7 +111,9 @@ namespace SchoolShield
         public string AdminHash = "";
         public int Iterations = 100000;
         // Chord that must be HELD for AdminHotkeyHoldMs: a stray key press can never open the admin terminal.
-        public string AdminHotkey = "Ctrl+Shift+Alt+F12";
+        public string AdminHotkey = "Ctrl+Shift+Alt+A";
+        // 7 quick clicks on the clock in the header also open the admin terminal (for keyboards that hide Fn keys).
+        public bool AdminClickGesture = true;
         public int AdminHotkeyHoldMs = 1500;
         public int AdminModeMinutes = 30;
         public int MaxCodeAttempts = 5;
@@ -137,6 +161,8 @@ namespace SchoolShield
         public string UsbMode = "block";
 
         public AiSettings Ai = new AiSettings();
+        public BrowserSettings Browser = new BrowserSettings();
+        public WifiSettings Wifi = new WifiSettings();
         public InstallOptions Install = new InstallOptions();
 
         public Config()
@@ -166,28 +192,9 @@ namespace SchoolShield
                 ".zip", ".rar", ".7z", ".torrent"
             });
             Sections.AddRange(new string[] { "home", "apps", "docs", "media", "files", "web", "system" });
+            Browser.VideoSites.AddRange(new string[] { "youtube.com", "youtu.be", "youtube-nocookie.com", "rutube.ru", "vkvideo.ru", "vk.com", "vk.ru" });
 
-            CategoryRules.Add(new CategoryRule("office", "Офисные", "",
-                "word", "excel", "powerpoint", "outlook", "onenote", "access", "publisher", "libreoffice", "openoffice",
-                "writer", "calc", "impress", "wps", "acrobat", "reader", "foxit", "sumatra", "djvu", "офис", "office", "pdf"));
-            CategoryRules.Add(new CategoryRule("study", "Учебные", "",
-                "scratch", "idle", "thonny", "kumir", "кумир", "geogebra", "lazarus", "pascal", "алгоритм", "mathcad",
-                "stellarium", "chem", "хими", "физик", "математик", "обучен", "учебн", "урок", "typing", "стамина", "stamina",
-                "клавиатурный", "соло", "1с", "словарь", "dictionary", "lingvo", "переводчик"));
-            CategoryRules.Add(new CategoryRule("internet", "Интернет", "",
-                "chrome", "edge", "firefox", "yandex", "яндекс", "opera", "brave", "vivaldi", "browser", "браузер",
-                "zoom", "teams", "skype", "meet", "webex"));
-            CategoryRules.Add(new CategoryRule("dev", "Программирование", "",
-                "visual studio", "vs code", "vscode", "code::blocks", "codeblocks", "dev-c", "pycharm", "notepad++",
-                "git", "java", "arduino", "intellij", "eclipse", "android studio", "python", "devc"));
-            CategoryRules.Add(new CategoryRule("media", "Графика и медиа", "",
-                "paint", "gimp", "inkscape", "krita", "photos", "фотограф", "vlc", "media player", "проигрыватель",
-                "audacity", "kdenlive", "movies", "кино", "camera", "камера", "recorder", "звукозапись", "groove",
-                "photoshop", "blender", "mp3", "video", "видео", "музык", "music"));
-            CategoryRules.Add(new CategoryRule("system", "Системные", "",
-                "calculator", "калькулятор", "notepad", "блокнот", "snip", "ножницы", "sketch", "wordpad",
-                "character map", "таблица символов", "magnifier", "лупа", "on-screen keyboard", "экранная клавиатура",
-                "narrator", "clock", "часы", "будильник", "alarm", "quick assist", "remote desktop", "sticky", "заметки"));
+            CategoryRules.AddRange(DefaultCategoryRules());
 
             Links.Add(new LinkItem("Российская электронная школа", "https://resh.edu.ru"));
             Links.Add(new LinkItem("Учи.ру", "https://uchi.ru"));
@@ -204,11 +211,106 @@ namespace SchoolShield
             Bells.Add(new BellItem("14:10", "14:55", "Урок 7"));
         }
 
+
+        // ---------------------------------------------------------------- defaults that ship with the program (merged on load)
+
+        /// <summary>
+        /// Program categories. First match wins, so the order matters. These defaults are merged into whatever config.json
+        /// holds, so an update brings new categories and keywords to computers that were set up earlier.
+        /// </summary>
+        public static List<CategoryRule> DefaultCategoryRules()
+        {
+            List<CategoryRule> r = new List<CategoryRule>();
+            r.Add(new CategoryRule("office", "Офисные", "\uE8A5",
+                "word", "excel", "powerpoint", "outlook", "onenote", "access", "publisher", "visio", "libreoffice", "openoffice",
+                "writer", "calc", "impress", "wps", "acrobat", "reader", "foxit", "sumatra", "djvu", "офис", "office", "pdf"));
+            r.Add(new CategoryRule("study", "Учебное ПО", "\uE8F1",
+                // школьные предметы и тренажёры
+                "scratch", "kumir", "кумир", "geogebra", "mathcad", "stellarium", "chem", "хими", "физик", "математик", "обучен",
+                "учебн", "урок", "typing", "стамина", "stamina", "клавиатурный", "соло", "1с", "словарь", "dictionary", "lingvo", "переводчик",
+                // программирование
+                "idle", "thonny", "lazarus", "pascal", "алгоритм", "visual studio", "vs code", "vscode", "code::blocks", "codeblocks", "dev-c",
+                "devc", "pycharm", "notepad++", "github", "git bash", "gitkraken", "java", "arduino", "intellij", "eclipse", "android studio",
+                "python", "unity", "mblock", "makecode", "micro:bit", "microbit", "kodu",
+                // 3D-моделирование и печать
+                "3d", "blender", "tinkercad", "sketchup", "freecad", "компас", "kompas", "autocad", "solidworks", "fusion", "cura",
+                "openscad", "meshmixer", "nanocad",
+                // робототехника
+                "lego", "mindstorms", "wedo", "ev3", "spike", "robot", "робот", "education"));
+            r.Add(new CategoryRule("internet", "Интернет", "\uE774",
+                "chrome", "edge", "firefox", "yandex", "яндекс", "opera", "brave", "vivaldi", "browser", "браузер",
+                "zoom", "teams", "skype", "meet", "webex"));
+            r.Add(new CategoryRule("media", "Графика и медиа", "\uE91B",
+                "paint", "gimp", "inkscape", "krita", "photos", "фотограф", "vlc", "media player", "mpc-hc", "powerdvd", "проигрыватель",
+                "audacity", "kdenlive", "movies", "кино", "camera", "камера", "recorder", "звукозапись", "groove",
+                "photoshop", "mp3", "video", "видео", "музык", "music"));
+            r.Add(new CategoryRule("system", "Системные", "\uE770",
+                "calculator", "калькулятор", "notepad", "блокнот", "snip", "ножницы", "sketch", "wordpad",
+                "character map", "таблица символов", "magnifier", "лупа", "on-screen keyboard", "экранная клавиатура",
+                "narrator", "clock", "часы", "будильник", "alarm", "sticky", "заметки", "realtek", "audio manager"));
+            r.Add(new CategoryRule("microsoft", "Майкрософт", "\uE782",
+                "microsoft", "windows", "msn", "silverlight", "math input", "directx", "xbox", "bing"));
+            return r;
+        }
+
+        /// <summary>Programs that students never see (admin tools, remote access, games, assistants). AlwaysShow overrides this.</summary>
+        public static readonly string[] BuiltInHidden = new string[] {
+            "schoolshield", "безопасность windows", "windows security", "быстрая помощь", "quick assist", "cortana", "onedrive",
+            "copilot", "game bar", "solitaire", "xbox", "feedback hub", "центр отзывов", "get help", "техническая поддержка",
+            "your phone", "связь с телефоном", "mixed reality", "windows speech recognition", "распознавание речи", "remote desktop",
+            "удалённого рабочего стола", "удаленного рабочего стола", "odbc", "iscsi", "memory diagnostic", "диагностика памяти",
+            "resource monitor", "монитор ресурсов", "performance monitor", "системный монитор", "firewall", "брандмауэр",
+            "disk cleanup", "очистка диска", "defragment", "дефрагментация", "print management", "управление печатью",
+            "component services", "службы компонентов", "task scheduler", "планировщик заданий", "system information",
+            "сведения о системе", "steps recorder", "средство записи действий", "windows fax", "факс", "internet explorer",
+            "recovery drive", "диск восстановления", "windows tools", "средства windows", "registry", "реестр", "powershell",
+            "терминал", "командная строка", "command prompt", "task manager", "диспетчер задач", "control panel", "панель управления",
+            "settings", "параметры", "microsoft store", "магазин"
+        };
+
+        /// <summary>Extra processes the guard closes, on top of BlockedProcesses (help viewers open browsers; admin tools).</summary>
+        public static readonly string[] BuiltInBlockedProcesses = new string[] {
+            "hh", "helppane", "winhlp32", "quickassist", "msra", "mstsc", "odbcad32", "iscsicpl", "mdsched", "perfmon", "resmon",
+            "taskschd", "wf", "cleanmgr", "dfrgui", "printmanagement", "comexp", "msinfo32", "psr", "wfs", "rstrui", "recdisc"
+        };
+
+        public static bool IsBuiltInHidden(string name)
+        {
+            foreach (string h in BuiltInHidden)
+                if (name.IndexOf(h, StringComparison.OrdinalIgnoreCase) >= 0) return true;
+            return false;
+        }
+
+        internal void MergeDefaults()
+        {
+            // Programming merged into "Учебное ПО".
+            CategoryRules.RemoveAll(delegate (CategoryRule x) { return x.Id == "dev"; });
+            List<string> keys = new List<string>(AppCategories.Keys);
+            foreach (string k in keys) if (AppCategories[k] == "dev") AppCategories[k] = "study";
+
+            List<CategoryRule> merged = new List<CategoryRule>();
+            foreach (CategoryRule def in DefaultCategoryRules())
+            {
+                CategoryRule have = CategoryRules.Find(delegate (CategoryRule x) { return x.Id == def.Id; });
+                if (have == null) { merged.Add(def); continue; }
+                have.Name = def.Name;
+                have.Glyph = def.Glyph;
+                foreach (string kw in def.Keywords)
+                    if (!have.Keywords.Exists(delegate (string x) { return string.Equals(x, kw, StringComparison.OrdinalIgnoreCase); })) have.Keywords.Add(kw);
+                merged.Add(have);
+            }
+            foreach (CategoryRule r in CategoryRules)
+                if (!merged.Exists(delegate (CategoryRule x) { return x.Id == r.Id; })) merged.Insert(Math.Max(0, merged.Count - 0), r);
+            CategoryRules = merged;
+        }
+
         public static string DataDir { get { return Release.DataDir; } }
         public static string ConfigPath { get { return System.IO.Path.Combine(DataDir, "config.json"); } }
         public static string BadWordsPath { get { return System.IO.Path.Combine(DataDir, "badwords.txt"); } }
         public static string BlocklistPath { get { return System.IO.Path.Combine(DataDir, "blocklist.txt"); } }
         public static string WhitelistPath { get { return System.IO.Path.Combine(DataDir, "whitelist.txt"); } }
+        public static string AdHostsPath { get { return System.IO.Path.Combine(DataDir, "adblock-domains.txt"); } }
+        public static string ExtendedBlocklistPath { get { return System.IO.Path.Combine(DataDir, "blocklist-extended.txt"); } }
         public static string DisableFlagPath { get { return System.IO.Path.Combine(DataDir, "DISABLE"); } }
 
         public static Config Load()
@@ -225,8 +327,13 @@ namespace SchoolShield
                     {
                         if (c.Ai == null) c.Ai = new AiSettings();
                         if (c.Install == null) c.Install = new InstallOptions();
+                        if (c.Browser == null) c.Browser = new BrowserSettings();
+                        if (c.Wifi == null) c.Wifi = new WifiSettings();
+                        if (c.Wifi.AllowedSsids == null) c.Wifi.AllowedSsids = new List<string>();
+                        if (c.Browser.VideoSites == null || c.Browser.VideoSites.Count == 0) c.Browser.VideoSites = new Config().Browser.VideoSites;
                         if (c.Sections == null || c.Sections.Count == 0) c.Sections = new Config().Sections;
                         if (c.CategoryRules == null || c.CategoryRules.Count == 0) c.CategoryRules = new Config().CategoryRules;
+                        c.MergeDefaults();
                         if (c.AppCategories == null) c.AppCategories = new Dictionary<string, string>();
                         if (c.HiddenExact == null) c.HiddenExact = new List<string>();
                         if (c.AlwaysShow == null) c.AlwaysShow = new List<string>();
@@ -251,13 +358,15 @@ namespace SchoolShield
             File.WriteAllText(ConfigPath, json, new UTF8Encoding(false));
         }
 
-        public static List<Regex> LoadBadWords()
+        public static List<Regex> LoadBadWords() { return LoadBadWords(BadWordsPath); }
+
+        public static List<Regex> LoadBadWords(string path)
         {
             List<Regex> res = new List<Regex>();
             try
             {
-                if (!File.Exists(BadWordsPath)) return res;
-                foreach (string raw in File.ReadAllLines(BadWordsPath, Encoding.UTF8))
+                if (!File.Exists(path)) return res;
+                foreach (string raw in File.ReadAllLines(path, Encoding.UTF8))
                 {
                     string line = raw.Trim();
                     if (line.Length == 0 || line.StartsWith("#")) continue;
