@@ -44,3 +44,18 @@
 \brule\s*34\b
 \bnhentai\b
 \be-?hentai\b
+
+# --- спам-страницы и «взломанные» сайты (порно-ключевые слова в заголовке) ---
+\bblue\s*film\w*
+\bsex\s*(video|videos|tube|movie|movies|scandal)\b
+\bnaked\s+(girls?|women|teens?)\b
+\bnude\s+(girls?|women|teens?|pics?|photos?)\b
+\bfree\s+(porn|sex|xxx)\w*
+\bx{3,}\b
+\bpornstar\w*
+\bобнажённ\w*|\bобнажен\w*
+\bголые\s+(девки|девушки|женщины|тёлки|телки|школьницы)
+\bинтим\s*фото\b
+\bсекс[\s-]?(видео|чат|знакомства|кино)\b
+\bпорево\w*|\bпорнуха\w*|\bпорнушк\w*
+

@@ -358,7 +358,13 @@ namespace SchoolShield
             File.WriteAllText(ConfigPath, json, new UTF8Encoding(false));
         }
 
-        public static List<Regex> LoadBadWords() { return LoadBadWords(BadWordsPath); }
+        /// <summary>Forbidden words: the list that ships with the program (so updates reach old installs) plus the administrator's own.</summary>
+        public static List<Regex> LoadBadWords()
+        {
+            List<Regex> all = LoadBadWords(System.IO.Path.Combine(AppInfo.InstallDir, "config", "badwords.txt"));
+            all.AddRange(LoadBadWords(BadWordsPath));
+            return all;
+        }
 
         public static List<Regex> LoadBadWords(string path)
         {

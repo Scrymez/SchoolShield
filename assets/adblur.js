@@ -100,6 +100,10 @@
   var LABEL = /^(?:реклама|рекламное объявление|рекламный блок|рекламная публикация|на правах рекламы|партн[её]рский материал|партн[её]рская реклама|рекламодатель|спонсорский материал|спонсорская реклама|промо|ad|ads|advertisement|advertising|advertorial|sponsored|sponsored content|sponsored post|sponsored link|sponsored by.{0,40}|promoted|promoted by.{0,40}|ad choices|adchoices|paid content|paid post|paid partnership|partner content|реклама\.?\s*[«"“].{0,80}|erid\s*[:=]\s*[a-z0-9]{6,})\.?$/i;
   var ERID = /erid\s*[:=]\s*[a-z0-9]{6,}/i;
 
+  // Явно взрослые слова в тексте страницы (заголовки и описания в выдаче поиска, спам на взломанных сайтах):
+  // блок с таким текстом размывается так же, как реклама.
+  var ADULT = /(porn|порн|(^|[^a-z])xxx([^a-z]|$)|xnxx|xvideos|xhamster|hentai|хентай|blowjob|bukkake|blue\s*film|эротическ|sex\s*video|секс[\s-]?видео)/i;
+
   var TRACK = /[?&](utm_|yclid|gclid|fbclid|clickid|erid|ref=)/i;
 
   // Явные контейнеры рекламы на крупных площадках и в поиске.
@@ -294,8 +298,8 @@
       var t = n.nodeValue;
       if (!t) continue;
       t = t.trim();
-      if (t.length < 2 || t.length > 320) continue;
-      var hit = (t.length <= 90 && LABEL.test(t)) || (t.length <= 320 && ERID.test(t));
+      if (t.length < 2 || t.length > 400) continue;
+      var hit = (t.length <= 90 && LABEL.test(t)) || (t.length <= 320 && ERID.test(t)) || ADULT.test(t);
       if (!hit) continue;
       var p = n.parentElement;
       if (!p || p.__ssLabel) continue;

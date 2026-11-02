@@ -135,7 +135,7 @@ namespace SchoolShield
                 present.Add(w.Handle);
                 if (w.Pid == ownPid) continue;
 
-                if (cfg.CloseBadWindows && MatchesBad(w.Title))
+                if (cfg.CloseBadWindows && MatchesBad(w.Handle, w.Title))
                 {
                     HandleBadWindow(w);
                     continue;
@@ -161,6 +161,9 @@ namespace SchoolShield
             List<IntPtr> gone = new List<IntPtr>();
             foreach (IntPtr h in closing.Keys) if (!present.Contains(h)) gone.Add(h);
             foreach (IntPtr h in gone) closing.Remove(h);
+            List<IntPtr> deadTitles = new List<IntPtr>();
+            foreach (IntPtr h in titleCache.Keys) if (!present.Contains(h)) deadTitles.Add(h);
+            foreach (IntPtr h in deadTitles) titleCache.Remove(h);
             stripped.RemoveWhere(delegate(IntPtr h) { return !present.Contains(h); });
 
             if ((tick++ % 3) == 0) CheckProcesses();
@@ -202,11 +205,16 @@ namespace SchoolShield
 
         // ---------------------------------------------------------------- bad windows
 
-        private bool MatchesBad(string title)
+        private readonly Dictionary<IntPtr, KeyValuePair<string, bool>> titleCache = new Dictionary<IntPtr, KeyValuePair<string, bool>>();
+
+        /// <summary>Checked in several normalised forms ("p o r n o", "p0rn"...); the answer is cached while the title stays the same.</summary>
+        private bool MatchesBad(IntPtr handle, string title)
         {
-            foreach (Regex r in bad)
-                if (r.IsMatch(title)) return true;
-            return false;
+            KeyValuePair<string, bool> c;
+            if (titleCache.TryGetValue(handle, out c) && c.Key == title) return c.Value;
+            bool isBad = TextGuard.Matches(bad, title);
+            titleCache[handle] = new KeyValuePair<string, bool>(title, isBad);
+            return isBad;
         }
 
         private void HandleBadWindow(WinInfo w)

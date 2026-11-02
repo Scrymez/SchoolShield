@@ -169,9 +169,7 @@ namespace SchoolShield
 
         public bool IsBadText(string text)
         {
-            if (string.IsNullOrEmpty(text)) return false;
-            foreach (Regex r in badWords) if (r.IsMatch(text)) return true;
-            return false;
+            return TextGuard.Matches(badWords, text);
         }
 
         // ---------------------------------------------------------------- navigation
@@ -201,8 +199,10 @@ namespace SchoolShield
             {
                 if (whitelist && !Matches(allowed, host) && !IsAllowedHelper(host))
                     return NavDecision.Deny("Этот сайт не входит в список разрешённых школой.", host);
-                string decoded = SafeUnescape(u.PathAndQuery);
-                if (IsBadText(decoded)) return NavDecision.Deny("Запрещённый запрос или адрес.", host);
+                // Each path segment and each query value is checked on its own: "q=p+o+r+n+o" must not glue the parameter name
+                // "q" to the word.
+                foreach (string piece in UrlPieces(u))
+                    if (IsBadText(piece)) return NavDecision.Deny("Запрещённый запрос или адрес.", host);
             }
             return NavDecision.Allow(host);
         }
@@ -211,6 +211,19 @@ namespace SchoolShield
         private static bool IsAllowedHelper(string host)
         {
             return false;
+        }
+
+        private static IEnumerable<string> UrlPieces(Uri u)
+        {
+            List<string> pieces = new List<string>();
+            foreach (string seg in u.AbsolutePath.Split('/'))
+                if (seg.Length > 0) pieces.Add(SafeUnescape(seg));
+            foreach (string pair in u.Query.TrimStart('?').Split(new char[] { '&' }, StringSplitOptions.RemoveEmptyEntries))
+            {
+                int eq = pair.IndexOf('=');
+                pieces.Add(SafeUnescape(eq < 0 ? pair : pair.Substring(eq + 1)));
+            }
+            return pieces;
         }
 
         private static string SafeUnescape(string s)
