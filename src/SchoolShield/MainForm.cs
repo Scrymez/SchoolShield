@@ -58,7 +58,19 @@ namespace SchoolShield
             DoubleBuffered = true;
             KeyPreview = false;
 
-            if (State.Preview)
+            if (State.Windowed)
+            {
+                // Teacher edition: an ordinary resizable window with a taskbar button, nothing is locked.
+                FormBorderStyle = FormBorderStyle.Sizable;
+                StartPosition = FormStartPosition.Manual;
+                ShowInTaskbar = true;
+                Rectangle wa = Screen.PrimaryScreen.WorkingArea;
+                Size = new Size(Math.Min(1500, (int)(wa.Width * 0.92)), Math.Min(940, (int)(wa.Height * 0.92)));
+                MinimumSize = new Size(Math.Min(900, wa.Width), Math.Min(600, wa.Height));
+                Location = new Point(wa.Left + (wa.Width - Width) / 2, wa.Top + (wa.Height - Height) / 2);
+                try { Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath); } catch { }
+            }
+            else if (State.Preview)
             {
                 FormBorderStyle = FormBorderStyle.Sizable;
                 StartPosition = FormStartPosition.CenterScreen;
@@ -90,7 +102,7 @@ namespace SchoolShield
 
             BackColor = Theme.Background;
             ForeColor = Theme.Text;
-            Padding = new Padding(0, State.Preview ? 0 : DockForm.BarHeight, 0, 0);
+            Padding = new Padding(0, State.Soft ? 0 : DockForm.BarHeight, 0, 0);
 
             // sections (only those the administrator enabled)
             AddSection(new HomeSection(this));
@@ -291,6 +303,14 @@ namespace SchoolShield
             clockTimer.Tick += delegate { UpdateHeader(); };
             clockTimer.Start();
 
+            if (State.Windowed)
+            {
+                // Teacher edition: no dock bar, no keyboard hook, no admin chord; the 18+ guard runs in its own background process.
+                ReloadCatalog();
+                Activate();
+                return;
+            }
+
             if (!State.Preview) ReserveDockArea();
 
             dock = new DockForm(this);
@@ -392,7 +412,7 @@ namespace SchoolShield
 
         protected override void OnFormClosing(FormClosingEventArgs e)
         {
-            if (!State.ExitRequested && !State.Preview)
+            if (!State.ExitRequested && !State.Soft)
             {
                 e.Cancel = true;   // the shell must never go away
                 return;
@@ -420,7 +440,7 @@ namespace SchoolShield
 
         protected override void WndProc(ref Message m)
         {
-            if (m.Msg == Native.WM_SYSCOMMAND && !State.Preview && !State.AdminMode)
+            if (m.Msg == Native.WM_SYSCOMMAND && !State.Soft && !State.AdminMode)
             {
                 int cmd = m.WParam.ToInt32() & 0xFFF0;
                 if (cmd == Native.SC_MINIMIZE || cmd == Native.SC_CLOSE) return;
@@ -592,7 +612,7 @@ namespace SchoolShield
                     Ui.Toast("Файлы этого типа запрещены.");
                     return;
                 }
-                if (!State.AdminMode && FileRoots.RootOf(FileRoots.Resolve(Cfg), path) == null)
+                if (!State.Privileged && FileRoots.RootOf(FileRoots.Resolve(Cfg), path) == null)
                 {
                     Ui.Toast("Этот файл вне разрешённых папок.");
                     return;
@@ -689,7 +709,7 @@ namespace SchoolShield
         /// <summary>Admin only: remove a program from Windows completely.</summary>
         public void UninstallApp(AppEntry app)
         {
-            if (!State.AdminMode) { Ui.Toast("Удаление доступно только администратору."); return; }
+            if (!State.Privileged) { Ui.Toast("Удаление доступно только администратору."); return; }
             try
             {
                 if (Programs.IsStoreApp(app))
@@ -711,7 +731,7 @@ namespace SchoolShield
 
         public void ShowUninstallDialog(string preselect)
         {
-            if (!State.AdminMode) { Ui.Toast("Удаление доступно только администратору."); return; }
+            if (!State.Privileged) { Ui.Toast("Удаление доступно только администратору."); return; }
             UninstallDialog d = new UninstallDialog(preselect, delegate { try { BeginInvoke(new Action(ReloadCatalog)); } catch { } });
             d.Show();
         }
@@ -730,7 +750,7 @@ namespace SchoolShield
 
         public void EmptyRecycleBin()
         {
-            if (!State.AdminMode) { Ui.Toast("Очистка корзины доступна только администратору."); return; }
+            if (!State.Privileged) { Ui.Toast("Очистка корзины доступна только администратору."); return; }
             if (MessageBox.Show(this, "Очистить корзину навсегда?", "Корзина", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes) return;
             Ui.Toast(RecycleBin.EmptyCurrentUser() ? "Корзина очищена." : "Корзина уже пуста или недоступна.");
         }
@@ -780,7 +800,7 @@ namespace SchoolShield
         public void ExitSession()
         {
             State.ExitRequested = true;
-            if (State.Preview) { Close(); return; }
+            if (State.Soft) { Close(); return; }
             Native.ExitWindowsEx(Native.EWX_LOGOFF, 0);
         }
     }

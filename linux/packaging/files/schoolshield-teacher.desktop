@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Name=Центр учителя
+Name[en]=Teacher Center
+GenericName=SchoolShield
+Comment=Программы, документы, файлы и фильтр 18+ в одном окне
+Exec=schoolshield-teacher center
+Icon=schoolshield-teacher
+Terminal=false
+Categories=Education;Utility;
+Keywords=школа;учитель;программы;документы;фильтр;
+StartupNotify=true

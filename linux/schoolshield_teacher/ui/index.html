@@ -1,0 +1,514 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Центр учителя</title>
+<style>
+:root {
+  --bg: #0b1220; --side: #0e1730; --card: #111c33; --card2: #172646; --line: #1f2f52; --text: #e2e8f0; --muted: #94a3b8;
+  --accent: #38bdf8; --on-accent: #07101e; --ok: #4ade80; --warn: #fbbf24; --bad: #f87171; --radius: 14px;
+  --shadow: 0 10px 30px rgba(0,0,0,.35);
+}
+:root[data-theme="light"] {
+  --bg: #f1f5f9; --side: #ffffff; --card: #ffffff; --card2: #e8eef7; --line: #d6dfec; --text: #0f172a; --muted: #5b6b85;
+  --accent: #0284c7; --on-accent: #ffffff; --ok: #15803d; --warn: #b45309; --bad: #b91c1c; --shadow: 0 10px 30px rgba(15,23,42,.12);
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; }
+body { background: var(--bg); color: var(--text); font: 15px/1.45 "Noto Sans", "Segoe UI", system-ui, sans-serif; overflow: hidden; }
+button, input, select, textarea { font: inherit; color: inherit; }
+button { cursor: pointer; }
+.app { display: grid; grid-template-columns: 232px 1fr; height: 100vh; }
+/* --- sidebar --- */
+.side { background: var(--side); border-right: 1px solid var(--line); display: flex; flex-direction: column; padding: 18px 12px; gap: 4px; }
+.brand { display: flex; align-items: center; gap: 10px; padding: 4px 10px 18px; font-weight: 700; font-size: 18px; color: var(--accent); }
+.brand svg { width: 28px; height: 28px; }
+.nav { display: flex; align-items: center; gap: 12px; width: 100%; padding: 11px 12px; border: 0; background: transparent; border-radius: 10px; text-align: left; color: var(--text); font-size: 15px; }
+.nav svg { width: 20px; height: 20px; flex: none; opacity: .85; }
+.nav:hover { background: var(--card2); }
+.nav.active { background: var(--accent); color: var(--on-accent); font-weight: 600; }
+.nav.active svg { opacity: 1; }
+.nav .dot { margin-left: auto; width: 9px; height: 9px; border-radius: 50%; background: var(--ok); }
+.nav .dot.off { background: var(--warn); }
+.grow { flex: 1; }
+.side .foot { color: var(--muted); font-size: 12px; padding: 8px 12px 0; }
+/* --- main --- */
+.main { display: flex; flex-direction: column; min-width: 0; height: 100vh; }
+.top { display: flex; align-items: center; gap: 16px; padding: 14px 26px; border-bottom: 1px solid var(--line); background: var(--bg); }
+.top h1 { margin: 0; font-size: 20px; white-space: nowrap; }
+.search { flex: 1; max-width: 520px; position: relative; }
+.search input { width: 100%; padding: 10px 14px 10px 40px; border-radius: 12px; border: 1px solid var(--line); background: var(--card); outline: none; }
+.search input:focus { border-color: var(--accent); }
+.search svg { position: absolute; left: 12px; top: 10px; width: 20px; height: 20px; color: var(--muted); }
+.bell { color: var(--muted); font-size: 14px; white-space: nowrap; }
+.bell b { color: var(--text); }
+.clock { font-size: 26px; font-weight: 700; color: var(--accent); font-variant-numeric: tabular-nums; }
+.content { flex: 1; overflow: auto; padding: 24px 26px 40px; }
+h2 { margin: 0 0 14px; font-size: 18px; }
+.sub { color: var(--muted); margin: -8px 0 16px; }
+.row { display: flex; gap: 14px; flex-wrap: wrap; }
+.card { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px 18px; }
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(132px, 1fr)); gap: 14px; }
+.tile { position: relative; display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 18px 10px 14px; background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); text-align: center; min-height: 128px; transition: transform .08s, background .12s; }
+.tile:hover { background: var(--card2); transform: translateY(-2px); }
+.tile .ico { width: 52px; height: 52px; display: grid; place-items: center; border-radius: 12px; overflow: hidden; background: var(--card2); font-weight: 700; font-size: 22px; color: var(--accent); }
+.tile .ico img { width: 52px; height: 52px; object-fit: contain; }
+.tile .nm { font-size: 13.5px; line-height: 1.25; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; word-break: break-word; }
+.tile .star { position: absolute; top: 6px; right: 6px; width: 28px; height: 28px; border-radius: 8px; border: 0; background: transparent; color: var(--muted); opacity: 0; font-size: 17px; line-height: 1; }
+.tile:hover .star, .tile .star.on { opacity: 1; }
+.tile .star.on { color: var(--warn); }
+.tile .badge { position: absolute; top: 8px; left: 8px; font-size: 10px; letter-spacing: .02em; padding: 2px 6px; border-radius: 6px; background: var(--card2); color: var(--muted); }
+.chips { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; }
+.chip { padding: 7px 14px; border-radius: 999px; border: 1px solid var(--line); background: var(--card); color: var(--text); font-size: 14px; }
+.chip.active { background: var(--accent); color: var(--on-accent); border-color: var(--accent); font-weight: 600; }
+.list { display: flex; flex-direction: column; gap: 8px; }
+.item { display: flex; align-items: center; gap: 14px; padding: 11px 14px; background: var(--card); border: 1px solid var(--line); border-radius: 12px; width: 100%; text-align: left; }
+.item:hover { background: var(--card2); }
+.item .ic { width: 34px; height: 34px; border-radius: 9px; background: var(--card2); display: grid; place-items: center; color: var(--accent); flex: none; }
+.item .ic svg { width: 19px; height: 19px; }
+.item .t { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.item .m { color: var(--muted); font-size: 13px; white-space: nowrap; }
+.btn { padding: 10px 18px; border-radius: 11px; border: 1px solid var(--line); background: var(--card2); }
+.btn:hover { filter: brightness(1.12); }
+.btn.primary { background: var(--accent); color: var(--on-accent); border-color: var(--accent); font-weight: 600; }
+.btn.danger { color: var(--bad); }
+.btn:disabled { opacity: .5; cursor: default; }
+.field { padding: 10px 12px; border-radius: 10px; border: 1px solid var(--line); background: var(--card); outline: none; min-width: 0; }
+.field:focus { border-color: var(--accent); }
+textarea.field { width: 100%; min-height: 220px; font: 13px/1.5 "DejaVu Sans Mono", monospace; resize: vertical; }
+.muted { color: var(--muted); }
+.ok { color: var(--ok); } .warn { color: var(--warn); } .bad { color: var(--bad); }
+.status { display: grid; grid-template-columns: 24px 1fr; gap: 6px 12px; align-items: start; padding: 10px 0; border-bottom: 1px solid var(--line); }
+.status:last-child { border-bottom: 0; }
+.status .mark { font-size: 18px; line-height: 1.2; }
+.slider { width: 100%; accent-color: var(--accent); height: 28px; }
+.crumbs { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; margin-bottom: 14px; color: var(--muted); }
+.crumbs button { border: 0; background: transparent; color: var(--accent); padding: 2px 4px; }
+.two { display: grid; grid-template-columns: 220px 1fr; gap: 18px; }
+.side2 { display: flex; flex-direction: column; gap: 6px; }
+.side2 button { text-align: left; padding: 9px 12px; border-radius: 10px; border: 0; background: transparent; }
+.side2 button:hover { background: var(--card2); }
+.cols { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+pre.log { background: #000; color: #4ade80; padding: 12px; border-radius: 10px; font-size: 12.5px; max-height: 240px; overflow: auto; white-space: pre-wrap; margin: 10px 0 0; }
+.toast { position: fixed; right: 22px; bottom: 22px; display: flex; flex-direction: column; gap: 8px; z-index: 50; }
+.toast div { background: var(--card2); border: 1px solid var(--line); border-radius: 12px; padding: 11px 16px; box-shadow: var(--shadow); max-width: 380px; animation: pop .18s; }
+@keyframes pop { from { transform: translateY(8px); opacity: 0; } }
+.modal { position: fixed; inset: 0; background: rgba(2,6,16,.6); display: grid; place-items: center; z-index: 60; }
+.modal .box { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 22px; width: min(440px, 92vw); box-shadow: var(--shadow); }
+.modal h3 { margin: 0 0 8px; }
+.modal .acts { display: flex; gap: 10px; justify-content: flex-end; margin-top: 18px; }
+.empty { padding: 40px; text-align: center; color: var(--muted); }
+.hero { display: grid; grid-template-columns: 1.4fr 1fr; gap: 16px; margin-bottom: 22px; }
+.big { font-size: 28px; font-weight: 700; }
+@media (max-width: 960px) {
+  .app { grid-template-columns: 68px 1fr; }
+  .nav .lbl, .brand span, .side .foot { display: none; }
+  .nav { justify-content: center; padding: 12px 0; }
+  .nav .dot { display: none; }
+  .hero, .cols, .two { grid-template-columns: 1fr; }
+  .bell { display: none; }
+}
+</style>
+</head>
+<body>
+<div class="app">
+  <aside class="side">
+    <div class="brand"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6l8-3z"/><path d="M8.5 12l2.5 2.5 4.5-5"/></svg><span>Центр учителя</span></div>
+    <nav id="nav" style="display:flex;flex-direction:column;gap:4px"></nav>
+    <div class="grow"></div>
+    <button class="nav" id="themeBtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg><span class="lbl" id="themeLbl">Светлая тема</span></button>
+    <div class="foot" id="foot"></div>
+  </aside>
+  <div class="main">
+    <header class="top">
+      <h1 id="pageTitle">Главная</h1>
+      <div class="search"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg><input id="q" type="search" placeholder="Поиск программ и файлов…" autocomplete="off"></div>
+      <div class="grow"></div>
+      <div class="bell" id="bell"></div>
+      <div class="clock" id="clock">--:--</div>
+    </header>
+    <main class="content" id="content"></main>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+<script>
+"use strict";
+const TOKEN = "__TOKEN__";
+const ICONS = {
+  home: '<path d="M3 11l9-8 9 8"/><path d="M5 10v10h5v-6h4v6h5V10"/>',
+  apps: '<rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/>',
+  docs: '<path d="M6 2h9l5 5v15H6z"/><path d="M14 2v6h6M9 13h7M9 17h7"/>',
+  media: '<rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="M21 16l-5-5-8 8"/>',
+  files: '<path d="M3 6a2 2 0 012-2h4l2 2h8a2 2 0 012 2v10a2 2 0 01-2 2H5a2 2 0 01-2-2z"/>',
+  web: '<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c3 3 3 15 0 18M12 3c-3 3-3 15 0 18"/>',
+  system: '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 00.3 1.8l.1.1a2 2 0 11-2.8 2.8l-.1-.1a1.7 1.7 0 00-1.8-.3 1.7 1.7 0 00-1 1.5V21a2 2 0 11-4 0v-.1a1.7 1.7 0 00-1.1-1.5 1.7 1.7 0 00-1.8.3l-.1.1a2 2 0 11-2.8-2.8l.1-.1a1.7 1.7 0 00.3-1.8 1.7 1.7 0 00-1.5-1H3a2 2 0 110-4h.1a1.7 1.7 0 001.5-1.1 1.7 1.7 0 00-.3-1.8l-.1-.1a2 2 0 112.8-2.8l.1.1a1.7 1.7 0 001.8.3H9a1.7 1.7 0 001-1.5V3a2 2 0 114 0v.1a1.7 1.7 0 001 1.5 1.7 1.7 0 001.8-.3l.1-.1a2 2 0 112.8 2.8l-.1.1a1.7 1.7 0 00-.3 1.8V9a1.7 1.7 0 001.5 1H21a2 2 0 110 4h-.1a1.7 1.7 0 00-1.5 1z"/>',
+  protect: '<path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6l8-3z"/><path d="M8.5 12l2.5 2.5 4.5-5"/>',
+  folder: '<path d="M3 6a2 2 0 012-2h4l2 2h8a2 2 0 012 2v10a2 2 0 01-2 2H5a2 2 0 01-2-2z"/>',
+  file: '<path d="M6 2h9l5 5v15H6z"/><path d="M14 2v6h6"/>',
+  sheet: '<rect x="4" y="3" width="16" height="18" rx="2"/><path d="M4 9h16M4 15h16M10 3v18"/>',
+  slides: '<rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/>',
+  pdf: '<path d="M6 2h9l5 5v15H6z"/><path d="M14 2v6h6M9 14h6M9 18h4"/>',
+  images: '<rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="M21 16l-5-5-8 8"/>',
+  video: '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M10 9l5 3-5 3z"/>',
+  audio: '<path d="M9 18V5l11-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="17" cy="16" r="3"/>',
+  wifi: '<path d="M2 9a15 15 0 0120 0M5 12.5a10 10 0 0114 0M8.5 16a5 5 0 017 0"/><circle cx="12" cy="19" r="1"/>',
+  link: '<path d="M10 14a5 5 0 007 0l3-3a5 5 0 00-7-7l-1 1"/><path d="M14 10a5 5 0 00-7 0l-3 3a5 5 0 007 7l1-1"/>'
+};
+const svg = (n) => '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' + ICONS[n] + '</svg>';
+
+const SECTIONS = [
+  ["home", "Главная", "home"], ["apps", "Программы", "apps"], ["docs", "Документы", "docs"], ["media", "Фото и видео", "media"],
+  ["files", "Файлы", "files"], ["web", "Интернет", "web"], ["system", "Система", "system"], ["protect", "Защита 18+", "protect"]
+];
+let S = { state: null, apps: [], prefs: { theme: "dark", favorites: [] }, section: "home", prot: null, filter: "all", docTab: "docs", mediaTab: "images",
+          docsCache: {}, fileDir: "", query: "" };
+
+// ---------------------------------------------------------------- helpers
+const $ = (s, r) => (r || document).querySelector(s);
+function h(tag, attrs, ...kids) {
+  const e = document.createElement(tag);
+  for (const k in (attrs || {})) {
+    if (k === "class") e.className = attrs[k];
+    else if (k === "html") e.innerHTML = attrs[k];
+    else if (k.startsWith("on")) e.addEventListener(k.slice(2), attrs[k]);
+    else if (attrs[k] !== false && attrs[k] != null) e.setAttribute(k, attrs[k] === true ? "" : attrs[k]);
+  }
+  for (const c of kids.flat()) if (c != null && c !== false) e.append(c.nodeType ? c : document.createTextNode(c));
+  return e;
+}
+async function api(path, body) {
+  const opt = { headers: { "X-Token": TOKEN } };
+  if (body !== undefined) { opt.method = "POST"; opt.headers["Content-Type"] = "application/json"; opt.body = JSON.stringify(body); }
+  const r = await fetch(path, opt);
+  if (!r.ok) throw new Error("Ошибка " + r.status);
+  return r.json();
+}
+function toast(text, ms) {
+  const t = h("div", {}, text); $("#toast").append(t); setTimeout(() => t.remove(), ms || 3600);
+}
+function confirmBox(title, text, okText, danger) {
+  return new Promise((res) => {
+    const close = (v) => { m.remove(); res(v); };
+    const m = h("div", { class: "modal", onclick: (e) => { if (e.target === m) close(false); } },
+      h("div", { class: "box" }, h("h3", {}, title), h("div", { class: "muted" }, text),
+        h("div", { class: "acts" }, h("button", { class: "btn", onclick: () => close(false) }, "Отмена"),
+          h("button", { class: "btn " + (danger ? "danger" : "primary"), onclick: () => close(true) }, okText || "Да"))));
+    document.body.append(m);
+  });
+}
+function askBox(title, text, secret) {
+  return new Promise((res) => {
+    const input = h("input", { class: "field", type: secret ? "password" : "text", style: "width:100%;margin-top:12px" });
+    const close = (v) => { m.remove(); res(v); };
+    input.addEventListener("keydown", (e) => { if (e.key === "Enter") close(input.value); if (e.key === "Escape") close(null); });
+    const m = h("div", { class: "modal" }, h("div", { class: "box" }, h("h3", {}, title), h("div", { class: "muted" }, text), input,
+      h("div", { class: "acts" }, h("button", { class: "btn", onclick: () => close(null) }, "Отмена"), h("button", { class: "btn primary", onclick: () => close(input.value) }, "Готово"))));
+    document.body.append(m); input.focus();
+  });
+}
+const fmtDate = (t) => new Date(t * 1000).toLocaleDateString("ru-RU", { day: "numeric", month: "short", year: "numeric" });
+const fmtSize = (n) => n > 1048576 ? (n / 1048576).toFixed(1) + " МБ" : n > 1024 ? Math.round(n / 1024) + " КБ" : n + " Б";
+const kindIcon = (k) => ({ docs: "file", sheets: "sheet", slides: "slides", pdf: "pdf", images: "images", video: "video", audio: "audio" }[k] || "file");
+function savePrefs() { api("/api/prefs", S.prefs).catch(() => {}); }
+
+// ---------------------------------------------------------------- shell
+function buildNav() {
+  const nav = $("#nav"); nav.innerHTML = "";
+  for (const [id, name, icon] of SECTIONS) {
+    const b = h("button", { class: "nav", "data-id": id, onclick: () => go(id), title: name }, h("span", { html: svg(icon) }), h("span", { class: "lbl" }, name));
+    if (id === "protect") b.append(h("i", { class: "dot", id: "protDot" }));
+    nav.append(b);
+  }
+}
+function go(id) {
+  S.section = id; S.query = ""; $("#q").value = "";
+  document.querySelectorAll(".nav[data-id]").forEach((b) => b.classList.toggle("active", b.dataset.id === id));
+  $("#pageTitle").textContent = SECTIONS.find((s) => s[0] === id)[1];
+  render();
+}
+let renderSeq = 0;
+async function render() {
+  // Страница собирается в отдельном контейнере и подменяется целиком: два быстрых вызова подряд не задваивают содержимое.
+  const seq = ++renderSeq, c = h("div");
+  const r = { home: renderHome, apps: renderApps, docs: renderDocs, media: renderMedia, files: renderFiles, web: renderWeb, system: renderSystem, protect: renderProtect }[S.section];
+  try { await r(c); } catch (e) { c.append(h("div", { class: "empty" }, "Не удалось загрузить: " + e.message)); }
+  if (seq !== renderSeq) return;
+  const host = $("#content"), top = host.scrollTop;
+  host.replaceChildren(c);
+  host.scrollTop = top;
+}
+function applyTheme() {
+  document.documentElement.dataset.theme = S.prefs.theme === "light" ? "light" : "dark";
+  $("#themeLbl").textContent = S.prefs.theme === "light" ? "Тёмная тема" : "Светлая тема";
+}
+
+// ---------------------------------------------------------------- clock and bells
+function tickClock() {
+  const d = new Date();
+  $("#clock").textContent = String(d.getHours()).padStart(2, "0") + ":" + String(d.getMinutes()).padStart(2, "0");
+  const bells = (S.state && S.state.bells) || [];
+  const now = d.getHours() * 60 + d.getMinutes();
+  const mins = (s) => { const [a, b] = s.split(":"); return (+a) * 60 + (+b); };
+  let txt = "";
+  for (let i = 0; i < bells.length; i++) {
+    const a = mins(bells[i].start), b = mins(bells[i].end);
+    if (now >= a && now < b) { txt = "<b>" + bells[i].title + "</b> · до " + bells[i].end + " (ещё " + (b - now) + " мин)"; break; }
+    if (now < a) { txt = (i === 0 ? "До начала: " : "Перемена · ") + "<b>" + bells[i].title + "</b> в " + bells[i].start; break; }
+  }
+  $("#bell").innerHTML = txt;
+}
+
+// ---------------------------------------------------------------- tiles
+function appTile(a) {
+  const fav = S.prefs.favorites.includes(a.id);
+  const ico = h("div", { class: "ico" }, (a.name || "?").trim().charAt(0).toUpperCase());
+  const img = h("img", { src: "/icon/" + encodeURIComponent(a.id) + "?t=" + TOKEN, alt: "", loading: "lazy" });
+  img.addEventListener("load", () => { ico.textContent = ""; ico.append(img); });
+  const star = h("button", { class: "star" + (fav ? " on" : ""), title: fav ? "Убрать из избранного" : "В избранное", onclick: (e) => {
+    e.stopPropagation();
+    S.prefs.favorites = fav ? S.prefs.favorites.filter((x) => x !== a.id) : S.prefs.favorites.concat([a.id]);
+    savePrefs(); render();
+  } }, fav ? "★" : "☆");
+  return h("div", { class: "tile", role: "button", tabindex: "0", title: a.generic || a.name, onclick: () => launch(a), onkeydown: (e) => { if (e.key === "Enter") launch(a); } },
+    star, a.windows ? h("span", { class: "badge" }, "Windows") : null, ico, h("div", { class: "nm" }, a.name));
+}
+async function launch(a) {
+  const r = await api("/api/launch", { id: a.id });
+  toast(r.ok ? "Запускаю: " + a.name : "Не удалось запустить: " + a.name);
+}
+function fileRow(f) {
+  return h("button", { class: "item", onclick: () => openPath(f.path), title: f.path },
+    h("span", { class: "ic", html: svg(kindIcon(f.kind)) }), h("span", { class: "t" }, f.name), h("span", { class: "m" }, f.folder || ""), h("span", { class: "m" }, fmtDate(f.modified)));
+}
+async function openPath(p) { const r = await api("/api/open", { path: p }); if (!r.ok) toast("Не удалось открыть файл"); }
+
+// ---------------------------------------------------------------- home
+async function renderHome(c) {
+  const st = S.state;
+  const hour = new Date().getHours();
+  const hello = hour < 5 ? "Доброй ночи" : hour < 12 ? "Доброе утро" : hour < 18 ? "Добрый день" : "Добрый вечер";
+  const p = S.prot || (S.prot = await api("/api/protection"));
+  const ok = p.applied && (p.dns_live || p.dns_provider === "None");
+  c.append(h("div", { class: "hero" },
+    h("div", { class: "card" }, h("div", { class: "big" }, hello + (st.user ? ", " + st.user : "") + "!"), h("div", { class: "muted" }, st.host + " · Linux Mint · версия " + st.version)),
+    h("div", { class: "card", style: "cursor:pointer", onclick: () => go("protect") },
+      h("div", { class: ok ? "ok" : "warn" }, (ok ? "✔ " : "⚠ ") + "Фильтр 18+: " + (ok ? "включён" : p.applied ? "включён частично" : "не включён")),
+      h("div", { class: "muted", style: "margin-top:4px" }, ok ? "Сайты 18+ закрыты. Всё остальное — без ограничений." : "Нажмите, чтобы включить или проверить."))));
+  const favs = S.apps.filter((a) => S.prefs.favorites.includes(a.id));
+  c.append(h("h2", {}, "Избранное"));
+  c.append(favs.length ? h("div", { class: "grid", style: "margin-bottom:26px" }, favs.map(appTile))
+    : h("div", { class: "card muted", style: "margin-bottom:26px" }, "Нажмите звёздочку на плитке программы, и она появится здесь."));
+  const docs = await docsFor(["docs", "sheets", "slides", "pdf"]);
+  c.append(h("h2", {}, "Недавние документы"));
+  c.append(docs.length ? h("div", { class: "list", style: "margin-bottom:26px" }, docs.slice(0, 6).map(fileRow)) : h("div", { class: "card muted", style: "margin-bottom:26px" }, "Документов в папках «Документы», «Рабочий стол» и «Загрузки» пока нет."));
+  c.append(h("h2", {}, "Полезные сайты"), linkGrid());
+}
+function linkGrid() {
+  return h("div", { class: "grid" }, (S.state.links || []).map((l) =>
+    h("div", { class: "tile", role: "button", tabindex: "0", onclick: () => openUrl(l.url) }, h("div", { class: "ico", html: svg("link") }), h("div", { class: "nm" }, l.name))));
+}
+async function openUrl(u) { const r = await api("/api/open-url", { url: u }); if (!r.ok) toast("Не удалось открыть адрес"); }
+async function docsFor(kinds) {
+  const key = kinds.join(",");
+  if (!S.docsCache[key]) S.docsCache[key] = await api("/api/docs?kinds=" + key);
+  return S.docsCache[key];
+}
+
+// ---------------------------------------------------------------- apps
+const FILTERS = [["all", "Все"], ["favorites", "Избранное"], ["office", "Офисные"], ["study", "Учебное ПО"], ["internet", "Интернет"], ["media", "Графика и медиа"], ["system", "Системные"], ["windows", "Windows-программы"], ["other", "Другое"]];
+function renderApps(c) {
+  const q = S.query.toLowerCase();
+  const chips = h("div", { class: "chips" }, FILTERS.map(([id, name]) => h("button", { class: "chip" + (S.filter === id ? " active" : ""), onclick: () => { S.filter = id; render(); } }, name)));
+  c.append(chips);
+  let list = S.apps.filter((a) => S.filter === "all" || (S.filter === "favorites" ? S.prefs.favorites.includes(a.id) : S.filter === "windows" ? a.windows : a.category === S.filter));
+  if (q) list = list.filter((a) => (a.name + " " + (a.generic || "")).toLowerCase().includes(q));
+  c.append(list.length ? h("div", { class: "grid" }, list.map(appTile)) : h("div", { class: "empty" }, "Ничего не найдено."));
+  c.append(h("p", { class: "muted", style: "margin-top:22px" }, "Программы Windows (Wine, Bottles) появляются здесь сами, когда у них есть ярлык в меню. Установка программ ничем не ограничена."));
+}
+
+// ---------------------------------------------------------------- documents and media
+async function tabsView(c, tabs, cur, set) {
+  c.append(h("div", { class: "chips" }, tabs.map(([id, name]) => h("button", { class: "chip" + (cur === id ? " active" : ""), onclick: () => { set(id); render(); } }, name))));
+}
+async function renderDocs(c) {
+  const tabs = [["docs", "Документы"], ["sheets", "Таблицы"], ["slides", "Презентации"], ["pdf", "PDF"]];
+  await tabsView(c, tabs, S.docTab, (v) => S.docTab = v);
+  let list = await docsFor([S.docTab]);
+  const q = S.query.toLowerCase(); if (q) list = list.filter((f) => f.name.toLowerCase().includes(q));
+  c.append(list.length ? h("div", { class: "list" }, list.map(fileRow)) : h("div", { class: "empty" }, "Здесь пока пусто."));
+}
+async function renderMedia(c) {
+  const tabs = [["images", "Фото"], ["video", "Видео"], ["audio", "Музыка"]];
+  await tabsView(c, tabs, S.mediaTab, (v) => S.mediaTab = v);
+  let list = await docsFor([S.mediaTab]);
+  const q = S.query.toLowerCase(); if (q) list = list.filter((f) => f.name.toLowerCase().includes(q));
+  c.append(list.length ? h("div", { class: "list" }, list.map(fileRow)) : h("div", { class: "empty" }, "Здесь пока пусто."));
+}
+
+// ---------------------------------------------------------------- files
+async function renderFiles(c) {
+  const folders = await api("/api/folders");
+  if (!S.fileDir) S.fileDir = folders[0].path;
+  const left = h("div", { class: "side2" }, folders.map((f) => h("button", { onclick: () => { S.fileDir = f.path; render(); } }, f.name)));
+  const right = h("div", {});
+  const data = await api("/api/files?path=" + encodeURIComponent(S.fileDir));
+  const parts = data.path.split("/").filter(Boolean);
+  const crumbs = h("div", { class: "crumbs" }, h("button", { onclick: () => { S.fileDir = "/"; render(); } }, "/"));
+  let acc = "";
+  parts.forEach((p, i) => { acc += "/" + p; const here = acc; crumbs.append("›", h("button", { onclick: () => { S.fileDir = here; render(); } }, p)); });
+  right.append(crumbs);
+  let entries = data.entries; const q = S.query.toLowerCase(); if (q) entries = entries.filter((e) => e.name.toLowerCase().includes(q));
+  right.append(entries.length ? h("div", { class: "list" }, entries.map((e) => h("button", { class: "item", onclick: () => { if (e.dir) { S.fileDir = e.path; render(); } else openPath(e.path); } },
+    h("span", { class: "ic", html: svg(e.dir ? "folder" : kindIcon(e.kind)) }), h("span", { class: "t" }, e.name), h("span", { class: "m" }, e.dir ? "" : fmtSize(e.size)), h("span", { class: "m" }, fmtDate(e.modified)))))
+    : h("div", { class: "empty" }, data.error || "Папка пуста."));
+  c.append(h("div", { class: "two" }, left, right));
+}
+
+// ---------------------------------------------------------------- web
+function renderWeb(c) {
+  const input = h("input", { class: "field", style: "flex:1;min-width:260px", placeholder: "Адрес сайта или запрос", onkeydown: (e) => { if (e.key === "Enter") go2(); } });
+  const go2 = () => {
+    let v = input.value.trim(); if (!v) return;
+    if (!/^https?:\/\//i.test(v)) v = /^[^\s]+\.[^\s]{2,}$/.test(v) ? "https://" + v : "https://yandex.ru/search/?text=" + encodeURIComponent(v) + "&fyandex=1";
+    openUrl(v);
+  };
+  c.append(h("div", { class: "row", style: "margin-bottom:22px" }, input, h("button", { class: "btn primary", onclick: go2 }, "Открыть в браузере")));
+  c.append(h("h2", {}, "Полезные сайты"), linkGrid());
+  c.append(h("p", { class: "muted", style: "margin-top:22px" }, "Сайты открываются в вашем обычном браузере. Материалы 18+ закрыты семейным DNS-фильтром и политиками браузеров."));
+}
+
+// ---------------------------------------------------------------- system
+async function renderSystem(c) {
+  const sys = await api("/api/system");
+  const v = sys.volume;
+  const out = h("span", { class: "muted" }, v.available ? v.volume + "%" : "недоступно");
+  const slider = h("input", { class: "slider", type: "range", min: 0, max: 100, value: v.volume == null ? 50 : v.volume, disabled: !v.available });
+  let timer = null;
+  slider.addEventListener("input", () => { out.textContent = slider.value + "%"; clearTimeout(timer); timer = setTimeout(() => api("/api/volume", { value: +slider.value }), 120); });
+  const mute = h("button", { class: "btn", onclick: async () => { const r = await api("/api/volume", { muted: !v.muted }); v.muted = !v.muted; mute.textContent = v.muted ? "Включить звук" : "Без звука"; } }, v.muted ? "Включить звук" : "Без звука");
+  const bat = sys.battery.present ? h("div", { class: "muted" }, "Батарея: " + sys.battery.percent + "% " + (sys.battery.charging ? "(заряжается)" : "")) : null;
+  c.append(h("div", { class: "cols" },
+    h("div", { class: "card" }, h("h2", {}, "Звук"), h("div", { class: "row", style: "align-items:center" }, slider, out), h("div", { style: "margin-top:12px" }, mute), bat),
+    h("div", { class: "card" }, h("h2", {}, "Питание"), h("div", { class: "row" },
+      h("button", { class: "btn", onclick: () => api("/api/power", { action: "lock" }) }, "Заблокировать"),
+      h("button", { class: "btn", onclick: async () => { if (await confirmBox("Выйти из сеанса?", "Не забудьте сохранить работу.", "Выйти")) api("/api/power", { action: "logout" }); } }, "Выйти"),
+      h("button", { class: "btn", onclick: async () => { if (await confirmBox("Перезагрузить компьютер?", "Не забудьте сохранить работу.", "Перезагрузить", true)) api("/api/power", { action: "reboot" }); } }, "Перезагрузить"),
+      h("button", { class: "btn danger", onclick: async () => { if (await confirmBox("Выключить компьютер?", "Не забудьте сохранить работу.", "Выключить", true)) api("/api/power", { action: "poweroff" }); } }, "Выключить")))));
+  const wifiBox = h("div", { class: "card", style: "margin-top:16px" }, h("h2", {}, "Wi-Fi"), h("div", { class: "muted" }, "Ищу сети…"));
+  c.append(wifiBox);
+  api("/api/wifi").then((nets) => {
+    wifiBox.innerHTML = ""; wifiBox.append(h("h2", {}, "Wi-Fi"));
+    if (!nets.length) { wifiBox.append(h("div", { class: "muted" }, sys.wifi_enabled ? "Сетей не найдено." : "Wi-Fi выключен или не поддерживается.")); return; }
+    wifiBox.append(h("div", { class: "list" }, nets.map((n) => h("button", { class: "item", onclick: () => connectWifi(n) },
+      h("span", { class: "ic", html: svg("wifi") }), h("span", { class: "t" }, n.ssid), h("span", { class: "m" }, n.active ? "подключено" : n.secure ? "защищена" : "открытая"), h("span", { class: "m" }, n.signal + "%")))));
+  }).catch(() => {});
+}
+async function connectWifi(n) {
+  if (n.active) { toast("Уже подключено к " + n.ssid); return; }
+  let pw = null;
+  if (n.secure) { pw = await askBox("Сеть «" + n.ssid + "»", "Введите пароль Wi-Fi (если сеть уже сохранена, оставьте пустым).", true); if (pw === null) return; }
+  toast("Подключаюсь к " + n.ssid + "…");
+  const r = await api("/api/wifi/connect", { ssid: n.ssid, password: pw || null });
+  toast(r.ok ? "Подключено: " + n.ssid : "Не удалось подключиться. " + (r.message || ""), 6000);
+}
+
+// ---------------------------------------------------------------- protection
+function statusRow(ok, title, text) {
+  return h("div", { class: "status" }, h("div", { class: "mark " + (ok === true ? "ok" : ok === false ? "warn" : "muted") }, ok === true ? "✔" : ok === false ? "⚠" : "•"),
+    h("div", {}, h("div", {}, title), h("div", { class: "muted" }, text)));
+}
+async function renderProtect(c) {
+  const p = S.prot = await api("/api/protection");
+  const dot = $("#protDot"); if (dot) dot.className = "dot" + (p.applied ? "" : " off");
+  const dnsOn = p.dns_provider !== "None";
+  c.append(h("p", { class: "sub" }, "Закрыт только материал 18+ (порно, эротика). Установка программ, терминал, флешки и всё остальное работают как обычно."));
+  const log = h("pre", { class: "log", style: "display:none" });
+  const run = async (path, label) => {
+    toast(label + ": подтвердите пароль администратора");
+    log.style.display = "block"; log.textContent = "Выполняется…";
+    try { const r = await api(path, {}); log.textContent = (r.lines || []).join("\n") || (r.ok ? "Готово." : "Ошибка."); toast(r.ok ? "Готово" : "Не удалось выполнить", 5000); }
+    catch (e) { log.textContent = e.message; }
+    S.prot = null; render();
+  };
+  c.append(h("div", { class: "card" },
+    statusRow(p.browsers_chromium.length > 0 && p.browsers_firefox.length >= 0 ? p.applied : false, "Браузеры", p.applied ? "SafeSearch и список закрытых сайтов: " + (p.browsers_chromium.length + p.browsers_firefox.length) + " политик (Chrome, Chromium, Edge, Brave, Vivaldi, Firefox)." : "Политики не применены."),
+    statusRow(dnsOn ? p.dns_live : null, "Семейный DNS-фильтр", dnsOn ? p.dns_provider + (p.dns_live ? " — работает" : p.dns_configured ? " — настроен, заработает после переподключения к сети" : " — не применён") : "Выключен в настройках."),
+    statusRow(p.hosts_block ? p.hosts : null, "Список /etc/hosts", p.hosts_block ? (p.hosts ? "Крупные сайты 18+ направлены на 0.0.0.0." : "Не применён.") : "Выключен в настройках."),
+    statusRow(p.session_x11 ? p.guard_running : null, "Охрана окон", p.session_x11 ? (p.guard_running ? "Работает: окна с материалом 18+ закрываются." : "Не запущена: стартует при следующем входе в систему.") : "Сеанс Wayland: окна других программ недоступны."),
+    statusRow(p.ai_enabled ? p.ai_installed : null, "ИИ-фильтр экрана", p.ai_installed ? (p.ai_enabled ? "Работает локально, порог " + Math.round(p.ai_threshold * 100) + "%." : "Установлен, но выключен.") : "Не установлен (необязательно).")));
+  c.append(h("div", { class: "row", style: "margin:16px 0" },
+    h("button", { class: "btn primary", onclick: () => run("/api/protection/apply", "Применение") }, p.applied ? "Применить заново" : "Включить фильтр 18+"),
+    h("button", { class: "btn danger", onclick: async () => { if (await confirmBox("Отключить фильтр 18+?", "Вернутся прежние настройки DNS и браузеров. Программа останется.", "Отключить", true)) run("/api/protection/remove", "Отключение"); } }, "Отключить"),
+    h("button", { class: "btn", onclick: () => run("/api/protection/ai", "Установка ИИ") }, p.ai_installed ? "Переустановить ИИ-фильтр" : "Установить ИИ-фильтр экрана")));
+  c.append(log);
+
+  const dnsSel = h("select", { class: "field" }, p.dns_choices.map((d) => h("option", { value: d, selected: d === p.dns_provider }, d === "None" ? "Не менять DNS" : d)));
+  const ai = h("input", { type: "checkbox", checked: p.ai_enabled });
+  const th = h("input", { class: "slider", type: "range", min: 70, max: 99, value: Math.round((p.ai_threshold || 0.93) * 100), style: "max-width:260px" });
+  const thOut = h("span", { class: "muted" }, th.value + "%"); th.addEventListener("input", () => thOut.textContent = th.value + "%");
+  const hosts = h("input", { type: "checkbox", checked: p.hosts_block });
+  c.append(h("div", { class: "card", style: "margin-top:8px" }, h("h2", {}, "Настройки"),
+    h("div", { class: "row", style: "align-items:center;margin-bottom:12px" }, h("span", { class: "muted", style: "width:150px" }, "Фильтр DNS"), dnsSel),
+    h("div", { class: "row", style: "align-items:center;margin-bottom:12px" }, h("label", {}, hosts, " Дополнительно закрыть сайты в /etc/hosts")),
+    h("div", { class: "row", style: "align-items:center;margin-bottom:12px" }, h("label", {}, ai, " ИИ-фильтр экрана"), h("span", { class: "muted" }, "порог"), th, thOut),
+    h("button", { class: "btn primary", onclick: async () => {
+      toast("Сохраняю: подтвердите пароль администратора");
+      const r = await api("/api/protection/settings", { dns: dnsSel.value, hosts_block: hosts.checked, ai_enabled: ai.checked, ai_threshold: th.value / 100 });
+      toast(r.ok ? "Сохранено и применено" : "Не удалось сохранить", 5000); S.prot = null; render();
+    } }, "Сохранить и применить")));
+
+  const lists = await api("/api/protection/lists");
+  const sites = h("textarea", { class: "field", spellcheck: "false", placeholder: "example-bad-site.com" }, lists.sites || "");
+  const words = h("textarea", { class: "field", spellcheck: "false", placeholder: "\\bслово\\b" }, lists.words || "");
+  c.append(h("div", { class: "card", style: "margin-top:16px" }, h("h2", {}, "Мои добавки"),
+    h("p", { class: "muted", style: "margin-top:-8px" }, "Основные списки (сотни крупных сайтов, слова) идут с программой и обновляются вместе с ней. Здесь только ваши правки: один сайт или одно регулярное выражение в строке."),
+    h("div", { class: "cols" }, h("div", {}, h("div", { class: "muted" }, "Дополнительные закрытые сайты"), sites), h("div", {}, h("div", { class: "muted" }, "Дополнительные слова в названиях окон"), words)),
+    h("div", { style: "margin-top:12px" }, h("button", { class: "btn primary", onclick: async () => {
+      toast("Сохраняю: подтвердите пароль администратора");
+      const r = await api("/api/protection/lists", { sites: sites.value, words: words.value });
+      toast(r.ok ? "Списки сохранены и применены" : "Не удалось сохранить", 5000);
+    } }, "Сохранить и применить"))));
+
+  const upd = h("div", { class: "card", style: "margin-top:16px" }, h("h2", {}, "Обновления"), h("div", { class: "muted" }, "Версия " + S.state.version + ". Обновления берутся из GitHub и проверяются подписью автора."));
+  const updOut = h("pre", { class: "log", style: "display:none" });
+  upd.append(h("div", { class: "row", style: "margin-top:12px" },
+    h("button", { class: "btn", onclick: async () => {
+      updOut.style.display = "block"; updOut.textContent = "Проверяю…";
+      const r = await api("/api/update/check");
+      updOut.textContent = r.error ? r.error : r.available ? "Доступна версия " + r.latest + ".\n" + (r.notes || "") : "Установлена последняя версия (" + r.current + ").";
+      if (r.available) {
+        const b = h("button", { class: "btn primary", style: "margin-top:10px", onclick: async () => {
+          toast("Скачиваю и проверяю подпись…"); const x = await api("/api/update/install", {});
+          updOut.textContent = (x.lines || []).join("\n"); toast(x.ok ? "Обновлено. Перезапустите Центр учителя." : "Не удалось обновить", 6000);
+        } }, "Скачать и установить"); upd.append(b);
+      }
+    } }, "Проверить обновления")), updOut);
+  c.append(upd);
+  c.append(h("p", { class: "muted", style: "margin-top:18px" }, "Автор: " + S.state.author + " · " + S.state.site));
+}
+
+// ---------------------------------------------------------------- start
+async function boot() {
+  buildNav();
+  S.state = await api("/api/state");
+  S.prefs = Object.assign({ theme: "dark", favorites: [] }, S.state.prefs);
+  $("#foot").textContent = "v" + S.state.version + " · " + S.state.author;
+  document.title = S.state.title;
+  applyTheme();
+  $("#themeBtn").addEventListener("click", () => { S.prefs.theme = S.prefs.theme === "light" ? "dark" : "light"; savePrefs(); applyTheme(); });
+  $("#q").addEventListener("input", (e) => {
+    S.query = e.target.value;
+    if (S.query && !["apps", "docs", "media", "files"].includes(S.section)) go("apps"); else render();
+  });
+  document.addEventListener("keydown", (e) => { if (e.key === "/" && document.activeElement.tagName !== "INPUT" && document.activeElement.tagName !== "TEXTAREA") { e.preventDefault(); $("#q").focus(); } });
+  tickClock(); setInterval(tickClock, 15000);
+  setInterval(() => api("/api/heartbeat", {}).catch(() => {}), 10000);
+  api("/api/apps").then((a) => { S.apps = a; if (S.section === "home" || S.section === "apps") render(); });
+  api("/api/protection").then((p) => { S.prot = p; const d = $("#protDot"); if (d) d.className = "dot" + (p.applied ? "" : " off"); }).catch(() => {});
+  go("home");
+}
+boot().catch((e) => { document.body.innerHTML = "<p style='padding:30px;font-family:sans-serif'>Центр учителя не запустился: " + e.message + "</p>"; });
+</script>
+</body>
+</html>

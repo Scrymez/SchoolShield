@@ -58,7 +58,7 @@ namespace SchoolShield
             Add(m, "Открыть", delegate { main.LaunchApp(app); });
             bool fav = main.User.IsFavorite(app.Name);
             Add(m, fav ? "Убрать из избранного" : "В избранное", delegate { main.ToggleFavorite(app); });
-            if (State.AdminMode)
+            if (State.Privileged)
             {
                 // Only after the admin code was entered (admin mode) and still behind the Windows admin password prompt.
                 Separator(m);

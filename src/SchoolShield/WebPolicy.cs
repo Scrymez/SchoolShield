@@ -34,6 +34,7 @@ namespace SchoolShield
         private readonly bool whitelist;
         private readonly bool blockIp;
         private readonly bool blockAds;
+        private readonly bool teacher;
         private readonly string searchTemplate;
 
         public int BlockedDomains { get { return blocked.Count + wildLabels.Count; } }
@@ -42,7 +43,8 @@ namespace SchoolShield
 
         public WebPolicy(Config cfg, string shippedDir, string dataDir)
         {
-            whitelist = string.Equals(cfg.Install.WebMode, "Whitelist", StringComparison.OrdinalIgnoreCase);
+            teacher = cfg.IsTeacher();
+            whitelist = !teacher && string.Equals(cfg.Install.WebMode, "Whitelist", StringComparison.OrdinalIgnoreCase);
             blockIp = cfg.Browser.BlockIpAddresses;
             blockAds = cfg.Browser.BlockAdNetworks;
             searchTemplate = cfg.Browser.SearchUrl;
@@ -54,12 +56,12 @@ namespace SchoolShield
                 if (string.IsNullOrEmpty(dir)) continue;
                 ReadBlocklist(Path.Combine(dir, "blocklist.txt"));
                 ReadBlocklist(Path.Combine(dir, "blocklist-extended.txt"));
-                foreach (string h in ReadLines(Path.Combine(dir, "adblock-domains.txt"))) adHosts.Add(h);
-                if (whitelist) foreach (string h in ReadLines(Path.Combine(dir, "whitelist.txt"))) allowed.Add(h);
+                foreach (string h in ReadLines(Path.Combine(dir, "adblock-domains.txt"), false)) adHosts.Add(h);
+                if (whitelist) foreach (string h in ReadLines(Path.Combine(dir, "whitelist.txt"), false)) allowed.Add(h);
             }
             badWords = new List<Regex>();
-            foreach (string dir in new string[] { shippedDir, dataDir })
-                if (!string.IsNullOrEmpty(dir)) badWords.AddRange(Config.LoadBadWords(Path.Combine(dir, "badwords.txt")));
+            if (!string.IsNullOrEmpty(shippedDir)) badWords.AddRange(Config.LoadBadWords(Path.Combine(shippedDir, Config.BadWordsFile(cfg))));
+            if (!string.IsNullOrEmpty(dataDir)) badWords.AddRange(Config.LoadBadWords(Path.Combine(dataDir, Config.BadWordsExtraFile(cfg))));
         }
 
         public static WebPolicy Load(Config cfg)
@@ -69,7 +71,10 @@ namespace SchoolShield
 
         // ---------------------------------------------------------------- loading
 
-        private static IEnumerable<string> ReadLines(string path)
+        /// <summary>Everything after this line of blocklist.txt (anonymizers, extension stores) is for the student edition only.</summary>
+        public const string StudentOnlyMarker = "# @student-only";
+
+        private static IEnumerable<string> ReadLines(string path, bool stopAtStudentOnly)
         {
             List<string> res = new List<string>();
             try
@@ -78,6 +83,7 @@ namespace SchoolShield
                 foreach (string raw in File.ReadAllLines(path, Encoding.UTF8))
                 {
                     string t = raw.Trim().ToLowerInvariant();
+                    if (stopAtStudentOnly && t.StartsWith(StudentOnlyMarker, StringComparison.Ordinal)) break;
                     if (t.Length == 0 || t.StartsWith("#")) continue;
                     int i = t.IndexOf("://", StringComparison.Ordinal);
                     if (i >= 0) t = t.Substring(i + 3);
@@ -91,7 +97,7 @@ namespace SchoolShield
 
         private void ReadBlocklist(string path)
         {
-            foreach (string t in ReadLines(path))
+            foreach (string t in ReadLines(path, teacher))
             {
                 if (t.EndsWith(".*"))
                 {

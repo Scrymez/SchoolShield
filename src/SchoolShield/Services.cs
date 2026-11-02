@@ -149,6 +149,7 @@ namespace SchoolShield
         public string Name;
         public string Path;
         public bool ReadOnly;
+        public bool NoIndex;    // whole disks: shown in the file manager, never scanned for the Documents / Media lists
     }
 
     internal static class FileKinds
@@ -197,6 +198,20 @@ namespace SchoolShield
             if (!string.IsNullOrEmpty(pub)) Add(list, "Общая папка", Path.Combine(pub, "Documents"), false);
             foreach (SharedFolder s in cfg.SharedFolders)
                 if (s != null && !string.IsNullOrEmpty(s.Path)) Add(list, s.Name ?? s.Path, s.Path, s.ReadOnly);
+            if (cfg.IsTeacher())
+            {
+                // A teacher sees whole disks (a USB stick with a lesson, the school server drive).
+                try
+                {
+                    foreach (DriveInfo d in DriveInfo.GetDrives())
+                    {
+                        if (!d.IsReady || (d.DriveType != DriveType.Fixed && d.DriveType != DriveType.Removable && d.DriveType != DriveType.Network)) continue;
+                        Add(list, "Диск " + d.Name.TrimEnd('\\'), d.Name, false);
+                        list[list.Count - 1].NoIndex = true;
+                    }
+                }
+                catch { }
+            }
             return list;
         }
 
@@ -219,7 +234,13 @@ namespace SchoolShield
 
         public static string Normalize(string path)
         {
-            return Path.GetFullPath(path).TrimEnd('\\');
+            string full = Path.GetFullPath(path).TrimEnd('\\');
+            return full.Length == 2 && full[1] == ':' ? full + "\\" : full;   // "C:" would mean "the current folder of drive C"
+        }
+
+        private static string Prefix(string rootPath)
+        {
+            return rootPath.EndsWith("\\") ? rootPath : rootPath + "\\";
         }
 
         /// <summary>The root that contains <paramref name="path"/>, or null if it is outside every allowed folder.</summary>
@@ -232,7 +253,7 @@ namespace SchoolShield
             foreach (FileRoot r in roots)
             {
                 bool inside = string.Equals(full, r.Path, StringComparison.OrdinalIgnoreCase)
-                    || full.StartsWith(r.Path + "\\", StringComparison.OrdinalIgnoreCase);
+                    || full.StartsWith(Prefix(r.Path), StringComparison.OrdinalIgnoreCase);
                 if (inside && (best == null || r.Path.Length > best.Path.Length)) best = r;
             }
             return best;
@@ -248,6 +269,7 @@ namespace SchoolShield
             foreach (FileRoot r in roots)
             {
                 if (result.Count >= max) break;
+                if (r.NoIndex) continue;
                 Walk(r.Path, 0, want, result, max);
             }
             result.Sort(delegate (FileItem a, FileItem b) { return b.Modified.CompareTo(a.Modified); });

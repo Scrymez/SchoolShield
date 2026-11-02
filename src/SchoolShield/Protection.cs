@@ -45,6 +45,59 @@ namespace SchoolShield
             catch { return false; }
         }
 
+        private static readonly System.Collections.Generic.Dictionary<string, string[]> DnsV4 = new System.Collections.Generic.Dictionary<string, string[]>
+        {
+            { "AdGuardFamily", new string[] { "94.140.14.15", "94.140.15.16" } },
+            { "Yandex", new string[] { "77.88.8.7", "77.88.8.3" } },
+            { "Cloudflare", new string[] { "1.1.1.3", "1.0.0.3" } },
+            { "CleanBrowsing", new string[] { "185.228.168.168", "185.228.169.168" } },
+            { "YandexCloudflare", new string[] { "77.88.8.7", "1.1.1.3" } }
+        };
+
+        /// <summary>Is the chosen family DNS filter the resolver of at least one working network adapter?</summary>
+        public static bool DnsFilterActive(string provider)
+        {
+            try
+            {
+                string[] want;
+                if (!DnsV4.TryGetValue(provider ?? "", out want)) return false;
+                foreach (System.Net.NetworkInformation.NetworkInterface nic in System.Net.NetworkInformation.NetworkInterface.GetAllNetworkInterfaces())
+                {
+                    if (nic.OperationalStatus != System.Net.NetworkInformation.OperationalStatus.Up) continue;
+                    foreach (System.Net.IPAddress a in nic.GetIPProperties().DnsAddresses)
+                        if (Array.IndexOf(want, a.ToString()) >= 0) return true;
+                }
+            }
+            catch { }
+            return false;
+        }
+
+        /// <summary>Has the installer written the SafeSearch / URL block policies for Chrome or Edge?</summary>
+        public static bool BrowserPoliciesPresent()
+        {
+            try
+            {
+                foreach (string key in new string[] { @"SOFTWARE\Policies\Google\Chrome", @"SOFTWARE\Policies\Microsoft\Edge" })
+                    using (RegistryKey k = Registry.LocalMachine.OpenSubKey(key + @"\URLBlocklist"))
+                        if (k != null && k.ValueCount > 0) return true;
+            }
+            catch { }
+            return false;
+        }
+
+        public static bool AutostartPresent()
+        {
+            try
+            {
+                using (RegistryKey k = Registry.LocalMachine.OpenSubKey(@"SOFTWARE\Microsoft\Windows\CurrentVersion\Run"))
+                {
+                    string v = k == null ? null : k.GetValue("SchoolShield") as string;
+                    return v != null && v.IndexOf("--teacher-guard", StringComparison.OrdinalIgnoreCase) >= 0;
+                }
+            }
+            catch { return false; }
+        }
+
         public static bool StudentExists(string name)
         {
             try
@@ -107,6 +160,13 @@ namespace SchoolShield
         {
             string args = ApplyArguments(o, usb) + (noShell ? " -NoShell" : "");
             return Run(Powershell("Install-SchoolShield.ps1", args, adminCode), output);
+        }
+
+        /// <summary>Teacher edition: DNS filter, browser policies, autostart of the guard. Nothing else is touched.</summary>
+        public static Process StartApplyTeacher(InstallOptions o, DataReceived output)
+        {
+            string args = "-NonInteractive -Dns " + (string.IsNullOrEmpty(o.Dns) ? "AdGuardFamily" : o.Dns);
+            return Run(Powershell("Install-SchoolShield-Teacher.ps1", args, null), output);
         }
 
         /// <summary>Starts the Uninstall script in "turn protection off" mode: keeps the program and the settings.</summary>

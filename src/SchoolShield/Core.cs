@@ -94,7 +94,15 @@ namespace SchoolShield
     {
         private static DateTime adminUntil = DateTime.MinValue;
         public static volatile bool Preview;
+        /// <summary>Teacher edition: the launcher is an ordinary window (taskbar, minimize, close); the guard runs in its own background process.</summary>
+        public static volatile bool Windowed;
         public static volatile bool ExitRequested;
+
+        /// <summary>The UI is a normal window: nothing is locked down (preview or teacher centre).</summary>
+        public static bool Soft { get { return Preview || Windowed; } }
+
+        /// <summary>May uninstall programs, empty the recycle bin and open any folder: the administrator in admin mode, or a teacher.</summary>
+        public static bool Privileged { get { return AdminMode || Windowed; } }
 
         public static bool AdminMode { get { return DateTime.Now < adminUntil; } }
 

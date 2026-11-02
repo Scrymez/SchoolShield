@@ -103,6 +103,12 @@ namespace SchoolShield
     /// </summary>
     public class Config
     {
+        public const string StudentEdition = "student";
+        public const string TeacherEdition = "teacher";
+
+        // "student": launcher instead of the desktop, everything locked. "teacher": ordinary Windows, only 18+ material is filtered.
+        public string Edition = StudentEdition;
+
         public string Title = "Школьный компьютер";
         public string Subtitle = "Только для учёбы";
 
@@ -274,6 +280,55 @@ namespace SchoolShield
             "taskschd", "wf", "cleanmgr", "dfrgui", "printmanagement", "comexp", "msinfo32", "psr", "wfs", "rstrui", "recdisc"
         };
 
+        public bool IsTeacher()
+        {
+            return string.Equals(Edition, TeacherEdition, StringComparison.OrdinalIgnoreCase);
+        }
+
+        /// <summary>
+        /// Teacher edition: the only restriction is 18+ material (porn, erotica). Everything that makes a student PC safe
+        /// (no installs, no minimize, process killing, locked drives, ad blur, whitelist mode) is switched off here, whatever
+        /// config.json says, so one config file can never leave a teacher half-locked.
+        /// </summary>
+        internal void ApplyEdition()
+        {
+            if (!IsTeacher()) return;
+            if (Title == "Школьный компьютер") Title = "Центр учителя";
+            if (Subtitle == "Только для учёбы") Subtitle = "Фильтр 18+ включён";
+
+            BlockMinimize = false;
+            DeleteForbiddenFiles = false;
+            KillBlockedProcesses = false;
+            KillOutsideProgramFiles = false;
+            CloseBadWindows = true;                 // 18+ window titles
+            UsbMode = "allow";
+            StudentCanDelete = true;
+            AllowStudentShutdown = true;
+            AllowStudentRestart = true;
+            AdminClickGesture = false;
+            ShowAllInstalled = true;
+
+            HiddenApps.Clear();
+            HiddenApps.Add("schoolshield");          // the launcher does not list itself
+            BlockedProcesses.Clear();
+            ForbiddenExtensions.Clear();
+            AllowedPaths.Clear();
+
+            Browser.BuiltInOnly = false;             // Chrome, Edge, Firefox... stay available (policies + DNS filter cover them)
+            Browser.AdBlur = false;
+            Browser.BlockAdNetworks = false;
+            Browser.BlockIpAddresses = false;
+            Browser.AllowDownloads = true;
+            Wifi.Enforce = false;
+            Wifi.StudentCanConnect = true;
+            Install.WebMode = "Filter";
+            Install.Downloads = "Off";
+            Install.AutoLogon = false;
+
+            // A wrong hit costs a teacher more than a missed one: a little less sensitive by default.
+            if (Math.Abs(Ai.Threshold - 0.90) < 0.0001) Ai.Threshold = 0.93;
+        }
+
         public static bool IsBuiltInHidden(string name)
         {
             foreach (string h in BuiltInHidden)
@@ -337,6 +392,8 @@ namespace SchoolShield
                         if (c.AppCategories == null) c.AppCategories = new Dictionary<string, string>();
                         if (c.HiddenExact == null) c.HiddenExact = new List<string>();
                         if (c.AlwaysShow == null) c.AlwaysShow = new List<string>();
+                        if (string.IsNullOrEmpty(c.Edition)) c.Edition = StudentEdition;
+                        c.ApplyEdition();
                         return c;
                     }
                 }
@@ -359,12 +416,17 @@ namespace SchoolShield
         }
 
         /// <summary>Forbidden words: the list that ships with the program (so updates reach old installs) plus the administrator's own.</summary>
-        public static List<Regex> LoadBadWords()
+        public static List<Regex> LoadBadWords(Config cfg)
         {
-            List<Regex> all = LoadBadWords(System.IO.Path.Combine(AppInfo.InstallDir, "config", "badwords.txt"));
-            all.AddRange(LoadBadWords(BadWordsPath));
+            List<Regex> all = LoadBadWords(System.IO.Path.Combine(AppInfo.InstallDir, "config", BadWordsFile(cfg)));
+            all.AddRange(LoadBadWords(System.IO.Path.Combine(DataDir, BadWordsExtraFile(cfg))));
             return all;
         }
+
+        /// <summary>Student edition: the strict list. Teacher edition: only unmistakable porn markers, so "sex education" or a nude in an art lesson is not closed.</summary>
+        public static string BadWordsFile(Config cfg) { return cfg != null && cfg.IsTeacher() ? "badwords-teacher.txt" : "badwords.txt"; }
+        /// <summary>The administrator's own additions (student edition keeps its historic file name).</summary>
+        public static string BadWordsExtraFile(Config cfg) { return cfg != null && cfg.IsTeacher() ? "badwords-extra.txt" : "badwords.txt"; }
 
         public static List<Regex> LoadBadWords(string path)
         {

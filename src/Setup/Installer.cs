@@ -24,6 +24,10 @@ namespace SchoolShield.Setup
         public bool StartMenuIcon = true;
         public bool DownloadModel = true;
 
+        /// <summary>"student", "teacher" or null = keep what the computer already has (updates never change the edition).</summary>
+        public string Edition;
+        public bool ApplyTeacherProtection = true;
+
         public static string Version
         {
             get
@@ -49,14 +53,124 @@ namespace SchoolShield.Setup
             Progress(70);
             CopySelf();
             CreateDataDir();
+            if (!string.IsNullOrEmpty(Edition)) SetEdition(Edition);
             CreateShortcuts();
             RegisterUninstall();
 
             Progress(82);
             if (DownloadModel) InstallPrerequisites();   // Visual C++, WebView2 and the AI model: downloaded here, not left to chance
 
+            // Fresh install of the teacher edition: switch the 18+ filter on. Update: refresh it only if it was on before.
+            if (IsTeacher && ApplyTeacherProtection && (!string.IsNullOrEmpty(Edition) || FilterWasOn()))
+            {
+                Progress(92);
+                ApplyTeacher();
+            }
+
             Progress(100);
             Log("Готово.");
+        }
+
+        // ------------------------------------------------------------------ edition
+
+        private static string ConfigPath { get { return Path.Combine(Release.DataDir, "config.json"); } }
+
+        /// <summary>The edition that is (or is about to be) installed: the explicit choice, else what config.json says, else student.</summary>
+        public string EffectiveEdition
+        {
+            get
+            {
+                if (!string.IsNullOrEmpty(Edition)) return Edition.ToLowerInvariant();
+                try
+                {
+                    if (File.Exists(ConfigPath))
+                    {
+                        System.Text.RegularExpressions.Match m = System.Text.RegularExpressions.Regex.Match(
+                            File.ReadAllText(ConfigPath), "\"Edition\"\\s*:\\s*\"(\\w+)\"");
+                        if (m.Success) return m.Groups[1].Value.ToLowerInvariant();
+                    }
+                }
+                catch { }
+                return "student";
+            }
+        }
+
+        public bool IsTeacher { get { return EffectiveEdition == "teacher"; } }
+
+        private static bool FilterWasOn()
+        {
+            try
+            {
+                using (RegistryKey k = Registry.LocalMachine.OpenSubKey(@"SOFTWARE\SchoolShield"))
+                    return k != null && Convert.ToInt32(k.GetValue("Configured") ?? 0) == 1;
+            }
+            catch { return false; }
+        }
+
+        /// <summary>Writes "Edition" into config.json (the rest of the file, which the administrator may have edited, is left alone).</summary>
+        private void SetEdition(string edition)
+        {
+            try
+            {
+                string path = ConfigPath;
+                if (!File.Exists(path)) return;
+                string json = File.ReadAllText(path, System.Text.Encoding.UTF8);
+                string field = "\"Edition\": \"" + edition.ToLowerInvariant() + "\"";
+                System.Text.RegularExpressions.Regex re = new System.Text.RegularExpressions.Regex("\"Edition\"\\s*:\\s*\"\\w*\"");
+                if (re.IsMatch(json)) json = re.Replace(json, field, 1);
+                else
+                {
+                    int i = json.IndexOf('{');
+                    json = json.Substring(0, i + 1) + "\n  " + field + "," + json.Substring(i + 1);
+                }
+                File.WriteAllText(path, json, new System.Text.UTF8Encoding(false));
+                Log("Редакция: " + (edition.ToLowerInvariant() == "teacher" ? "Учитель" : "Ученик"));
+
+                if (edition.ToLowerInvariant() == "teacher")
+                {
+                    // The student lists in ProgramData are copies of the shipped ones; teachers get empty "my additions" files instead.
+                    string block = Path.Combine(Release.DataDir, "blocklist.txt");
+                    if (File.Exists(block) && new FileInfo(block).Length > 20000)
+                    {
+                        string backup = Path.Combine(Release.DataDir, "blocklist.student-backup.txt");
+                        if (!File.Exists(backup)) File.Move(block, backup); else File.Delete(block);
+                    }
+                    WriteIfMissing(block, "# Ваши дополнительные закрытые сайты, по одному в строке (поддомены закрываются тоже).\n# Основной список идёт с программой.\n");
+                    WriteIfMissing(Path.Combine(Release.DataDir, "badwords-extra.txt"),
+                        "# Ваши дополнительные запрещённые слова в названиях окон: одно регулярное выражение в строке.\n# Основной список идёт с программой.\n");
+                }
+            }
+            catch (Exception ex) { Log("! Редакция не записана: " + ex.Message); }
+        }
+
+        private static void WriteIfMissing(string path, string text)
+        {
+            if (!File.Exists(path)) File.WriteAllText(path, text, new System.Text.UTF8Encoding(false));
+        }
+
+        /// <summary>DNS filter, browser policies, autostart of the guard: runs the teacher script from the installed copy.</summary>
+        private void ApplyTeacher()
+        {
+            string script = Path.Combine(InstallDir, "scripts", "Install-SchoolShield-Teacher.ps1");
+            if (!File.Exists(script)) { Log("! Нет скрипта фильтра 18+: " + script); return; }
+            Log("Включаю фильтр 18+…");
+            try
+            {
+                ProcessStartInfo psi = new ProcessStartInfo("powershell.exe", "-NoProfile -ExecutionPolicy Bypass -File \"" + script + "\" -NonInteractive");
+                psi.UseShellExecute = false;
+                psi.CreateNoWindow = true;
+                psi.RedirectStandardOutput = true;
+                psi.RedirectStandardError = true;
+                psi.StandardOutputEncoding = System.Text.Encoding.UTF8;
+                using (Process p = Process.Start(psi))
+                {
+                    string line;
+                    while ((line = p.StandardOutput.ReadLine()) != null) Log(line);
+                    p.WaitForExit();
+                    if (p.ExitCode != 0) Log("! Скрипт фильтра 18+ завершился с кодом " + p.ExitCode + ". Откройте «Управление защитой» и нажмите «Применить фильтр 18+».");
+                }
+            }
+            catch (Exception ex) { Log("! Фильтр 18+: " + ex.Message); }
         }
 
         private void CleanupLeftovers()
@@ -161,35 +275,53 @@ namespace SchoolShield.Setup
 
         // ------------------------------------------------------------------ shortcuts and Add/Remove Programs
 
-        private string DesktopLink { get { return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonDesktopDirectory), "SchoolShield.lnk"); } }
+        private static string DesktopDir { get { return Environment.GetFolderPath(Environment.SpecialFolder.CommonDesktopDirectory); } }
+        private string DesktopLink { get { return Path.Combine(DesktopDir, "SchoolShield.lnk"); } }
+        private string TeacherDesktopLink { get { return Path.Combine(DesktopDir, "Центр учителя.lnk"); } }
         private string MenuDir { get { return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonPrograms), "SchoolShield"); } }
         private string MenuLink { get { return Path.Combine(MenuDir, "SchoolShield.lnk"); } }
+        private string TeacherMenuLink { get { return Path.Combine(MenuDir, "Центр учителя.lnk"); } }
 
         private void CreateShortcuts()
         {
             string exe = Path.Combine(InstallDir, "SchoolShield.exe");
             try
             {
-                if (DesktopIcon) { MakeLink(DesktopLink, exe); Log("Значок на рабочем столе: " + DesktopLink); }
+                if (IsTeacher)
+                {
+                    // The desktop icon opens the teacher centre; administration lives in the Start menu and the tray icon.
+                    try { File.Delete(DesktopLink); } catch { }
+                    if (DesktopIcon) { MakeLink(TeacherDesktopLink, exe, "", "Центр учителя SchoolShield"); Log("Значок на рабочем столе: " + TeacherDesktopLink); }
+                    if (StartMenuIcon)
+                    {
+                        Directory.CreateDirectory(MenuDir);
+                        MakeLink(TeacherMenuLink, exe, "", "Центр учителя SchoolShield");
+                        MakeLink(MenuLink, exe, "--admin", "SchoolShield — управление фильтром 18+");
+                    }
+                    return;
+                }
+                try { File.Delete(TeacherDesktopLink); } catch { }
+                try { File.Delete(TeacherMenuLink); } catch { }
+                if (DesktopIcon) { MakeLink(DesktopLink, exe, "--admin", "SchoolShield — панель администратора"); Log("Значок на рабочем столе: " + DesktopLink); }
                 if (StartMenuIcon)
                 {
                     Directory.CreateDirectory(MenuDir);
-                    MakeLink(MenuLink, exe);
+                    MakeLink(MenuLink, exe, "--admin", "SchoolShield — панель администратора");
                 }
             }
             catch (Exception ex) { Log("! Не удалось создать ярлыки: " + ex.Message); }
         }
 
-        private static void MakeLink(string path, string exe)
+        private static void MakeLink(string path, string exe, string args, string description)
         {
             Type t = Type.GetTypeFromProgID("WScript.Shell");
             dynamic shell = Activator.CreateInstance(t);
             dynamic lnk = shell.CreateShortcut(path);
             lnk.TargetPath = exe;
-            lnk.Arguments = "--admin";
+            lnk.Arguments = args;
             lnk.WorkingDirectory = Path.GetDirectoryName(exe);
             lnk.IconLocation = exe + ",0";
-            lnk.Description = "SchoolShield — панель администратора";
+            lnk.Description = description;
             lnk.Save();
         }
 
@@ -200,7 +332,7 @@ namespace SchoolShield.Setup
                 using (RegistryKey k = Registry.LocalMachine.CreateSubKey(UninstallKey))
                 {
                     string exe = Path.Combine(InstallDir, "SchoolShield.exe");
-                    k.SetValue("DisplayName", "SchoolShield");
+                    k.SetValue("DisplayName", IsTeacher ? "SchoolShield — Учитель" : "SchoolShield");
                     k.SetValue("DisplayVersion", Version);
                     k.SetValue("Publisher", Release.Author);
                     k.SetValue("InstallLocation", InstallDir);
@@ -253,6 +385,7 @@ namespace SchoolShield.Setup
                 }
             }
             try { File.Delete(DesktopLink); } catch { }
+            try { File.Delete(TeacherDesktopLink); } catch { }
             try { if (Directory.Exists(MenuDir)) Directory.Delete(MenuDir, true); } catch { }
             try { Registry.LocalMachine.DeleteSubKeyTree(UninstallKey, false); } catch { }
 

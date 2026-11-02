@@ -752,7 +752,7 @@ namespace SchoolShield
 
         public override void OnShown()
         {
-            binButton.Visible = State.AdminMode;   // the recycle bin can be emptied by the administrator only
+            binButton.Visible = State.Privileged;   // the recycle bin can be emptied by the administrator only
             roots = FileRoots.Resolve(Main.Cfg);
             if (current != null && FileRoots.RootOf(roots, current) == null) current = null;
             Reload();

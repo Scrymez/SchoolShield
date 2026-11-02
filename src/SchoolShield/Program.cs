@@ -35,6 +35,7 @@ namespace SchoolShield
             }
 
             if (Array.IndexOf(args, "--admin") >= 0) return RunPanel();
+            if (Array.IndexOf(args, "--teacher-guard") >= 0) return TeacherHost.RunGuard();
 
             bool createdNew;
             using (Mutex single = new Mutex(true, @"Local\SchoolShield.Shell", out createdNew))
@@ -43,6 +44,9 @@ namespace SchoolShield
 
                 Config cfg = Config.Load();
                 Log.Write("start", "Запуск" + (preview ? " (preview)" : "") + ", пользователь " + WindowsIdentity.GetCurrent().Name);
+
+                // Teacher edition: ordinary Windows, the launcher is just a window. Checked before IsExempt: teachers are often administrators.
+                if (!preview && cfg.IsTeacher()) return TeacherHost.RunCenter(cfg);
 
                 if (!preview && IsExempt(cfg))
                 {

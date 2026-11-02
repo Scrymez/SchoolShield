@@ -1,0 +1,10 @@
+#!/bin/sh
+set -e
+case "$1" in
+  remove|deconfigure)
+    # Удаление пакета возвращает DNS, политики браузеров и /etc/hosts. При обновлении (upgrade) защита остаётся.
+    /usr/bin/schoolshield-teacher remove || true
+    pkill -f "schoolshield-teacher guard" 2>/dev/null || true
+    ;;
+esac
+exit 0

@@ -11,7 +11,7 @@ namespace SchoolShield.Setup
     {
         /// <summary>
         /// SchoolShield-Setup.exe             wizard (install or update)
-        /// SchoolShield-Setup.exe /S          silent install  (/nomodel, /noicon)
+        /// SchoolShield-Setup.exe /S          silent install  (/nomodel, /noicon, /edition=teacher|student, /noprotect)
         /// SchoolShield-Setup.exe /update     update (started by the program itself after a signed download)
         /// SchoolShield-Setup.exe /uninstall  uninstall (/S for silent)
         /// </summary>
@@ -25,6 +25,15 @@ namespace SchoolShield.Setup
             Installer inst = new Installer();
             inst.DownloadModel = !Has(args, "/nomodel");
             inst.DesktopIcon = !Has(args, "/noicon");
+            inst.ApplyTeacherProtection = !Has(args, "/noprotect");
+            foreach (string a in args)
+            {
+                if (a.StartsWith("/edition=", StringComparison.OrdinalIgnoreCase))
+                {
+                    string ed = a.Substring(9).Trim().ToLowerInvariant();
+                    if (ed == "teacher" || ed == "student") inst.Edition = ed;
+                }
+            }
 
             if (silent)
             {
@@ -77,6 +86,9 @@ namespace SchoolShield.Setup
         private readonly CheckBox model = new CheckBox();
         private readonly CheckBox launch = new CheckBox();
         private readonly CheckBox keepSettings = new CheckBox();
+        private readonly RadioButton forStudents = new RadioButton();
+        private readonly RadioButton forTeachers = new RadioButton();
+        private readonly CheckBox protect = new CheckBox();
         private bool done;
         private bool failed;
         private bool busy;
@@ -158,29 +170,56 @@ namespace SchoolShield.Setup
             }
             else
             {
-                info.Text = "Защита школьного компьютера с Windows 10: лаунчер вместо рабочего стола, запрет установки программ, "
-                    + "фильтры сайтов и DNS, локальный ИИ-фильтр изображений, обновления из GitHub.\n\n"
-                    + "Установка только копирует программу и создаёт значок «SchoolShield» на рабочем столе. "
-                    + "Защита включается позже, при первом запуске с этого значка (мастер).";
+                info.Height = 112;
+                string existing = inst.EffectiveEdition;
+                info.Text = "Защита компьютера с Windows 10 и 11. Ученическая редакция: лаунчер вместо рабочего стола, запрет установки "
+                    + "программ, фильтры сайтов и DNS, ИИ-фильтр изображений. Редакция для учителей: обычная Windows, закрыт только материал 18+.\n\n"
+                    + "Обновления берутся из GitHub и проверяются подписью.";
+
+                if (!update)
+                {
+                    forStudents.Text = "Школьный компьютер для учеников (полная защита)";
+                    forStudents.AutoSize = true;
+                    forStudents.Location = new Point(0, 120);
+                    forStudents.ForeColor = TextColor;
+                    forStudents.Checked = inst.Edition == null ? existing != "teacher" : inst.Edition == "student";
+                    page1.Controls.Add(forStudents);
+
+                    forTeachers.Text = "Компьютер учителя (только фильтр 18+, без других запретов)";
+                    forTeachers.AutoSize = true;
+                    forTeachers.Location = new Point(0, 148);
+                    forTeachers.ForeColor = TextColor;
+                    forTeachers.Checked = !forStudents.Checked;
+                    page1.Controls.Add(forTeachers);
+                }
+
+                protect.Text = "Сразу включить фильтр 18+ (рекомендуется)";
+                protect.Checked = true;
+                protect.AutoSize = true;
+                protect.Location = new Point(0, 176);
+                protect.ForeColor = TextColor;
+                protect.Visible = !update && forTeachers.Checked;
+                forTeachers.CheckedChanged += delegate { protect.Visible = forTeachers.Checked; launch.Text = forTeachers.Checked ? "Сразу открыть Центр учителя" : "Сразу открыть мастер первого запуска"; };
+                page1.Controls.Add(protect);
 
                 icon.Text = "Значок на рабочем столе и в меню «Пуск»";
                 icon.Checked = true;
                 icon.AutoSize = true;
-                icon.Location = new Point(0, 170);
+                icon.Location = new Point(0, 206);
                 icon.ForeColor = TextColor;
                 page1.Controls.Add(icon);
 
                 model.Text = "Скачать локальный ИИ-фильтр изображений (23 МБ, бесплатно)";
                 model.Checked = true;
                 model.AutoSize = true;
-                model.Location = new Point(0, 202);
+                model.Location = new Point(0, 236);
                 model.ForeColor = TextColor;
                 page1.Controls.Add(model);
 
-                launch.Text = "Сразу открыть мастер первого запуска";
+                launch.Text = forTeachers.Checked ? "Сразу открыть Центр учителя" : "Сразу открыть мастер первого запуска";
                 launch.Checked = !update;
                 launch.AutoSize = true;
-                launch.Location = new Point(0, 234);
+                launch.Location = new Point(0, 266);
                 launch.ForeColor = TextColor;
                 page1.Controls.Add(launch);
             }
@@ -230,6 +269,8 @@ namespace SchoolShield.Setup
             }
             if (busy) return;
 
+            if (!update && !uninstall) inst.Edition = forTeachers.Checked ? "teacher" : "student";
+            inst.ApplyTeacherProtection = protect.Checked || update;
             inst.DesktopIcon = icon.Checked || update;
             inst.StartMenuIcon = inst.DesktopIcon;
             inst.DownloadModel = model.Checked || update;
@@ -262,7 +303,7 @@ namespace SchoolShield.Setup
                         busy = false;
                         done = true;
                         action.Enabled = true;
-                        action.Text = failed ? "Закрыть" : (!uninstall && !update && launch.Checked ? "Готово — открыть мастер" : "Закрыть");
+                        action.Text = failed ? "Закрыть" : (!uninstall && !update && launch.Checked ? (inst.IsTeacher ? "Готово — открыть Центр" : "Готово — открыть мастер") : "Закрыть");
                         if (!failed) bar.Value = 100;
                         if (!failed && update)
                             Append("Обновление установлено. Чтобы изменения вступили в силу на компьютерах учеников, перезагрузите их.");
@@ -278,7 +319,14 @@ namespace SchoolShield.Setup
         {
             try
             {
-                ProcessStartInfo psi = new ProcessStartInfo(Path.Combine(inst.InstallDir, "SchoolShield.exe"), "--admin");
+                string exe = Path.Combine(inst.InstallDir, "SchoolShield.exe");
+                if (inst.IsTeacher)
+                {
+                    // explorer.exe starts it with the user's normal rights, not the installer's administrator token
+                    Process.Start("explorer.exe", "\"" + exe + "\"");
+                    return;
+                }
+                ProcessStartInfo psi = new ProcessStartInfo(exe, "--admin");
                 psi.UseShellExecute = true;
                 Process.Start(psi);
             }

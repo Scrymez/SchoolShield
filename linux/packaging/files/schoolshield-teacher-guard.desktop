@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=SchoolShield: охрана 18+
+Comment=Закрывает окна с материалами 18+
+Exec=schoolshield-teacher guard
+Icon=schoolshield-teacher
+Terminal=false
+NoDisplay=true
+X-GNOME-Autostart-enabled=true
+X-GNOME-Autostart-Delay=3

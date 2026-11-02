@@ -56,7 +56,7 @@ namespace SchoolShield
         public Guard(Config cfg)
         {
             this.cfg = cfg;
-            bad = Config.LoadBadWords();
+            bad = Config.LoadBadWords(cfg);
             blocked = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             foreach (string s in cfg.BlockedProcesses) blocked.Add(s.Trim().ToLowerInvariant().Replace(".exe", ""));
             foreach (string s in Config.BuiltInBlockedProcesses) blocked.Add(s);
@@ -166,7 +166,7 @@ namespace SchoolShield
             foreach (IntPtr h in deadTitles) titleCache.Remove(h);
             stripped.RemoveWhere(delegate(IntPtr h) { return !present.Contains(h); });
 
-            if ((tick++ % 3) == 0) CheckProcesses();
+            if ((tick++ % 3) == 0 && (cfg.KillBlockedProcesses || cfg.KillOutsideProgramFiles)) CheckProcesses();
             StyleDialogs();
         }
 
@@ -178,7 +178,7 @@ namespace SchoolShield
         /// </summary>
         private void StyleDialogs()
         {
-            if (State.Preview) return;
+            if (State.Preview || cfg.IsTeacher()) return;
             Native.EnumWindows(delegate (IntPtr h, IntPtr l)
             {
                 try
@@ -225,7 +225,7 @@ namespace SchoolShield
                 closing[w.Handle] = DateTime.Now;
                 Strikes++;
                 Log.Write("guard", "Запрещённое окно: \"" + w.Title + "\" (pid " + w.Pid + ")" + (State.Preview ? " [preview]" : ""));
-                Raise("Запрещённый контент. Окно закрыто.");
+                Raise(cfg.IsTeacher() ? "Материал 18+. Окно закрыто." : "Запрещённый контент. Окно закрыто.");
                 if (State.Preview) return;
                 if (w.Iconic) Native.ShowWindow(w.Handle, Native.SW_RESTORE);
                 Native.PostMessage(w.Handle, Native.WM_CLOSE, IntPtr.Zero, IntPtr.Zero);

@@ -335,7 +335,7 @@ namespace SchoolShield
         {
             InstalledProgram p = Selected();
             if (p == null) return;
-            if (!State.AdminMode && !IsAdminPanel)
+            if (!State.Privileged && !IsAdminPanel)
             {
                 MessageBox.Show(this, "Удаление доступно только администратору.", "Удаление");
                 return;

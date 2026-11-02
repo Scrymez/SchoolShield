@@ -61,6 +61,16 @@ Act 'отключить автовход' {
     Remove-ItemProperty -LiteralPath $Winlogon -Name 'DefaultPassword' -ErrorAction SilentlyContinue
 }
 
+Write-Step '2б. Охрана редакции «Учитель»'
+Act 'убрать автозапуск охраны' {
+    Remove-ItemProperty -LiteralPath 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Run' -Name 'SchoolShield' -ErrorAction SilentlyContinue
+}
+Act 'остановить охрану (значок в области уведомлений)' {
+    Get-CimInstance Win32_Process -Filter "Name='SchoolShield.exe'" -ErrorAction SilentlyContinue |
+        Where-Object { $_.CommandLine -like '*--teacher-guard*' } |
+        ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
+}
+
 Write-Step '3. Политики запуска (SRP) и системные политики'
 Act 'удалить SRP' {
     Remove-Item -LiteralPath 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\Safer\CodeIdentifiers' -Recurse -Force -ErrorAction SilentlyContinue

@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# Builds SchoolShield-Setup-<version>.exe (and its signature) on macOS / Linux / Windows (Git Bash).
+# Builds SchoolShield-Setup-<version>.exe and schoolshield-teacher_<version>_all.deb (and their signatures) on macOS / Linux / Windows (Git Bash).
 #
 #   tools/build.sh            build + sign (if the signing key exists)
 #   tools/build.sh --no-sign  build only
 #
-# Needs: .NET SDK 6+ (targets .NET Framework 4.8 through reference assemblies), zip, openssl (for signing).
+# Needs: .NET SDK 6+ (targets .NET Framework 4.8 through reference assemblies), zip, openssl (for signing), python3 (Linux package).
 # The private signing key is NEVER in the repository: ~/.schoolshield/signing-key.pem (override with SS_SIGNING_KEY).
 set -euo pipefail
 
@@ -48,6 +48,17 @@ if [ "$SIGN" = 1 ]; then
 fi
 ( cd "$DIST" && shasum -a 256 "$(basename "$OUT")" > "$(basename "$OUT").sha256" )
 
+echo "-- linux tests"
+python3 -W ignore -I -m unittest discover -s linux/tests
+echo "-- linux package (Linux Mint, teacher edition)"
+python3 linux/packaging/build_deb.py --out "$DIST"
+DEB="$(ls "$DIST"/schoolshield-teacher_*_all.deb)"
+if [ "$SIGN" = 1 ] && [ -f "$KEY" ]; then
+  openssl dgst -sha256 -sign "$KEY" -out "$DEB.sig" "$DEB"
+  echo "-- signed: $(basename "$DEB").sig"
+fi
+( cd "$DIST" && shasum -a 256 "$(basename "$DEB")" > "$(basename "$DEB").sha256" )
+
 echo
-ls -la "$DIST"/SchoolShield-Setup-*
+ls -la "$DIST"/SchoolShield-Setup-* "$DIST"/schoolshield-teacher_*
 echo "OK"

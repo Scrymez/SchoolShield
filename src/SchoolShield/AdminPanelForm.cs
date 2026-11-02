@@ -381,19 +381,33 @@ namespace SchoolShield
             Controls.Add(pageHost);
             Controls.Add(nav);
 
-            Add("status", "Состояние", BuildStatus);
-            Add("apps", "Программы", BuildApps);
-            Add("lists", "Сайты и слова", BuildLists);
-            Add("ai", "ИИ-фильтр", BuildAi);
-            Add("wifi", "Wi-Fi", BuildWifi);
-            Add("update", "Обновления", delegate { return new UpdatePanel(null, true); });
-            Add("settings", "Настройки", BuildSettings);
-            Add("log", "Журнал", BuildLog);
-            Add("about", "О программе", BuildAbout);
+            if (cfg.IsTeacher())
+            {
+                // Teacher edition: one screen of switches, nothing about students, shells or installers.
+                Text = "SchoolShield — управление фильтром 18+";
+                Add("status", "Состояние", BuildTeacherStatus);
+                Add("lists", "Сайты и слова", BuildTeacherLists);
+                Add("ai", "ИИ-фильтр", BuildAi);
+                Add("update", "Обновления", delegate { return new UpdatePanel(null, true); });
+                Add("log", "Журнал", BuildLog);
+                Add("about", "О программе", BuildAbout);
+            }
+            else
+            {
+                Add("status", "Состояние", BuildStatus);
+                Add("apps", "Программы", BuildApps);
+                Add("lists", "Сайты и слова", BuildLists);
+                Add("ai", "ИИ-фильтр", BuildAi);
+                Add("wifi", "Wi-Fi", BuildWifi);
+                Add("update", "Обновления", delegate { return new UpdatePanel(null, true); });
+                Add("settings", "Настройки", BuildSettings);
+                Add("log", "Журнал", BuildLog);
+                Add("about", "О программе", BuildAbout);
+            }
 
             for (int i = order.Count - 1; i >= 0; i--) nav.Controls.Add(navButtons[order[i]]);
             Label brand = new Label();
-            brand.Text = "SchoolShield";
+            brand.Text = cfg.IsTeacher() ? "SchoolShield · Учитель" : "SchoolShield";
             brand.Dock = DockStyle.Top;
             brand.Height = 70;
             brand.TextAlign = ContentAlignment.MiddleLeft;
@@ -405,7 +419,7 @@ namespace SchoolShield
             Show2("status");
             Shown += delegate
             {
-                if (!Protection.Configured()) OpenWizard();
+                if (!cfg.IsTeacher() && !Protection.Configured()) OpenWizard();
                 AutoRepair();
             };
         }
@@ -558,7 +572,8 @@ namespace SchoolShield
             try
             {
                 cfg.Save();
-                MessageBox.Show(this, "Сохранено. Изменения вступят в силу при следующем входе ученика (или после перезагрузки ПК).", "SchoolShield");
+                MessageBox.Show(this, cfg.IsTeacher() ? "Сохранено. Изменения вступят в силу при следующем входе в Windows."
+                    : "Сохранено. Изменения вступят в силу при следующем входе ученика (или после перезагрузки ПК).", "SchoolShield");
             }
             catch (Exception ex) { MessageBox.Show(this, "Не удалось сохранить: " + ex.Message, "Ошибка"); }
         }
@@ -635,6 +650,112 @@ namespace SchoolShield
                 MessageBoxButtons.YesNo, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2) != DialogResult.Yes) return;
             ScriptRunDialog.Run(this, "Отключение защиты", delegate (Protection.DataReceived output) { return Protection.StartRemove(output); });
             Show2("status");
+        }
+
+        // ---------------------------------------------------------------- teacher edition
+
+        private Control BuildTeacherStatus()
+        {
+            Panel p = new Panel();
+            bool on = Protection.Configured();
+            int y = 4;
+            if (!on)
+            {
+                Label banner = new Label();
+                banner.Text = "  Фильтр 18+ ещё не включён. Нажмите «Включить фильтр 18+».";
+                banner.SetBounds(0, y, 820, 40);
+                banner.TextAlign = ContentAlignment.MiddleLeft;
+                banner.BackColor = Theme.Accent;
+                banner.ForeColor = Theme.Dark ? Color.FromArgb(7, 12, 24) : Color.White;
+                banner.Font = Theme.UiFont(11, FontStyle.Bold);
+                p.Controls.Add(banner);
+                y += 56;
+            }
+
+            Row(p, ref y, "Версия программы", AppInfo.VersionString + "  •  редакция «Учитель»  •  автор: " + Release.Author, true);
+            Row(p, ref y, "Что ограничено", "только материал 18+ (порно, эротика). Установка программ и всё остальное — без ограничений.", true);
+            bool policies = Protection.BrowserPoliciesPresent();
+            Row(p, ref y, "Браузеры (Chrome, Edge, Firefox)", policies ? "SafeSearch и список закрытых сайтов включены" : "политики не применены", policies);
+            string dns = cfg.Install.Dns;
+            bool dnsOk = dns == "None" || Protection.DnsFilterActive(dns);
+            Row(p, ref y, "Семейный DNS-фильтр", dns == "None" ? "выключен" : dns + (dnsOk ? " — работает" : " — не применён к сетевым адаптерам"), dnsOk);
+            bool guardOn = TeacherHost.GuardRunning();
+            Row(p, ref y, "Охрана окон и экрана", guardOn ? "работает (значок SchoolShield в области уведомлений)" : (Protection.AutostartPresent()
+                ? "не запущена: стартует при входе в Windows или при открытии Центра учителя" : "не включена"), guardOn || Protection.AutostartPresent());
+            List<PrereqItem> pre = Prerequisites.Check(AppInfo.InstallDir);
+            List<string> missing = new List<string>();
+            foreach (PrereqItem it in pre) if (!it.Ok) missing.Add(it.Name);
+            Row(p, ref y, "ИИ-фильтр экрана", missing.Count == 0 ? "всё необходимое установлено" : "не хватает: " + string.Join("; ", missing.ToArray()) + " — вкладка «ИИ-фильтр» → «Исправить»", missing.Count == 0);
+            Row(p, ref y, "Папка настроек и журнала", Config.DataDir, true);
+            y += 10;
+
+            Lbl(p, "Фильтр DNS (AdGuardFamily: без взрослых сайтов, включает SafeSearch)", 0, y, 620, true); y += 26;
+            ComboBox dnsBox = new ComboBox();
+            dnsBox.SetBounds(0, y, 300, 28);
+            dnsBox.DropDownStyle = ComboBoxStyle.DropDownList;
+            dnsBox.Items.AddRange(new string[] { "AdGuardFamily", "YandexCloudflare", "Yandex", "Cloudflare", "CleanBrowsing", "None" });
+            dnsBox.SelectedItem = cfg.Install.Dns;
+            if (dnsBox.SelectedIndex < 0) dnsBox.SelectedIndex = 0;
+            p.Controls.Add(dnsBox);
+            y += 48;
+
+            Btn(p, on ? "Применить фильтр 18+ заново" : "Включить фильтр 18+", 0, y, 320, true, delegate
+            {
+                try
+                {
+                    cfg.Install.Dns = (string)dnsBox.SelectedItem;
+                    cfg.Save();
+                }
+                catch (Exception ex) { MessageBox.Show(this, "Не удалось сохранить: " + ex.Message, "Ошибка"); return; }
+                ScriptRunDialog.Run(this, "Включение фильтра 18+", delegate (Protection.DataReceived output)
+                {
+                    return Protection.StartApplyTeacher(cfg.Install, output);
+                });
+                Show2("status");
+            });
+            Btn(p, "Отключить фильтр 18+", 336, y, 260, false, delegate
+            {
+                if (MessageBox.Show(this, "Фильтр 18+ будет отключён: вернутся прежние настройки DNS и браузеров.\nПрограмма останется. Продолжить?",
+                    "Отключение фильтра", MessageBoxButtons.YesNo, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2) != DialogResult.Yes) return;
+                ScriptRunDialog.Run(this, "Отключение фильтра 18+", delegate (Protection.DataReceived output) { return Protection.StartRemove(output); });
+                Show2("status");
+            });
+            Btn(p, "Открыть Центр учителя", 612, y, 220, false, delegate
+            {
+                try { Process.Start("explorer.exe", "\"" + AppInfo.ExePath + "\""); }   // explorer starts it without administrator rights
+                catch (Exception ex) { MessageBox.Show(this, ex.Message); }
+            });
+            return p;
+        }
+
+        private Control BuildTeacherLists()
+        {
+            string extraBlock = Path.Combine(Config.DataDir, "blocklist.txt");
+            string extraWords = Path.Combine(Config.DataDir, Config.BadWordsExtraFile(cfg));
+            Panel p = new Panel();
+            Lbl(p, "Дополнительные закрытые сайты (по одному в строке; закрываются и поддомены)", 0, 0, 410, true).AutoSize = false;
+            TextBox block = Memo(p, 0, 26, 410, 440, Read(extraBlock));
+            Lbl(p, "Дополнительные запрещённые слова в названиях окон (регулярные выражения)", 426, 0, 410, true).AutoSize = false;
+            TextBox words = Memo(p, 426, 26, 410, 300, Read(extraWords));
+            Label hint = Lbl(p, "Основные списки (десятки тысяч порно- и эротических сайтов, слова) идут с программой и обновляются вместе с ней. "
+                + "Здесь только ваши добавки. Ложное срабатывание? Удалите строку или поправьте выражение.", 426, 336, 410, true);
+            hint.AutoSize = false;
+            hint.Height = 100;
+            Btn(p, "Сохранить и применить", 0, 486, 410, true, delegate
+            {
+                try
+                {
+                    Write(extraBlock, block.Text);
+                    Write(extraWords, words.Text);
+                }
+                catch (Exception ex) { MessageBox.Show(this, "Не удалось сохранить: " + ex.Message); return; }
+                ScriptRunDialog.Run(this, "Применение списков", delegate (Protection.DataReceived output)
+                {
+                    return Protection.StartApplyTeacher(cfg.Install, output);
+                });
+            });
+            Lbl(p, "Слова действуют после следующего входа в Windows, сайты — сразу после применения.", 426, 486, 410, true).AutoSize = false;
+            return p;
         }
 
         // ---------------------------------------------------------------- programs
@@ -790,7 +911,9 @@ namespace SchoolShield
             p.AutoScroll = true;
             int y = 0;
             Lbl(p, "Локальный ИИ-фильтр изображений: Yahoo open_nsfw (лицензия BSD-2) и ONNX Runtime. Работает на процессоре,", 0, y, 900, true); y += 24;
-            Lbl(p, "ничего не отправляет в интернет. Проверяет экран ученика и скрывает неприемлемые картинки в галерее.", 0, y, 900, true); y += 40;
+            Lbl(p, cfg.IsTeacher()
+                ? "ничего не отправляет в интернет. Проверяет экран и закрывает окно, где показано порно или эротика."
+                : "ничего не отправляет в интернет. Проверяет экран ученика и скрывает неприемлемые картинки в галерее.", 0, y, 900, true); y += 40;
 
             Lbl(p, "Что нужно для работы (проверяется и докачивается автоматически):", 0, y, 800, false); y += 30;
             List<Label> marks = new List<Label>();
@@ -867,7 +990,8 @@ namespace SchoolShield
             iv.SetBounds(520, y - 2, 90, 28); iv.Minimum = 1000; iv.Maximum = 30000; iv.Increment = 500; iv.Value = Math.Max(1000, Math.Min(30000, cfg.Ai.IntervalMs));
             p.Controls.Add(iv);
             y += 44;
-            Lbl(p, "Ниже порог — строже, но больше ложных срабатываний (рекомендуется 90).", 0, y, 800, true); y += 44;
+            Lbl(p, cfg.IsTeacher() ? "Ниже порог — строже, но больше ложных срабатываний (для учителей рекомендуется 93)."
+                : "Ниже порог — строже, но больше ложных срабатываний (рекомендуется 90).", 0, y, 800, true); y += 44;
 
             Btn(p, "Сохранить", 0, y, 200, true, delegate
             {
@@ -1188,7 +1312,16 @@ namespace SchoolShield
             t.SetBounds(0, 0, 800, 56);
             p.Controls.Add(t);
             int y = 70;
-            foreach (string line in new string[] {
+            foreach (string line in cfg.IsTeacher() ? new string[] {
+                "Версия " + AppInfo.VersionString + "  •  редакция «Учитель»",
+                "Автор: " + Release.Author,
+                "Windows остаётся обычной: можно устанавливать программы, пользоваться всем компьютером.",
+                "Закрывается только материал 18+ (порно, эротика): фильтры сайтов и DNS, ИИ-фильтр экрана.",
+                "",
+                "Исходный код и релизы: " + Release.SiteUrl,
+                "Лицензия: MIT. ИИ-модель: Yahoo open_nsfw (BSD-2-Clause). ONNX Runtime: MIT.",
+                "Подробности — в файлах LICENSE и THIRD_PARTY_NOTICES.txt рядом с программой."
+            } : new string[] {
                 "Версия " + AppInfo.VersionString,
                 "Автор: " + Release.Author,
                 "Защита школьного компьютера с Windows 10: лаунчер-оболочка, запрет установки ПО,",

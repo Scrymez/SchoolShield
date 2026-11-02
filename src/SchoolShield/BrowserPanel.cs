@@ -231,7 +231,7 @@ namespace SchoolShield
                         e.Response = env.CreateWebResourceResponse(null, 204, "No Content", "");
                         return;
                     }
-                    if (policy.IsYouTubeHost(reqHost)) e.Request.Headers.SetHeader("YouTube-Restrict", "Strict");   // YouTube Restricted Mode
+                    if (!cfg.IsTeacher() && policy.IsYouTubeHost(reqHost)) e.Request.Headers.SetHeader("YouTube-Restrict", "Strict");   // YouTube Restricted Mode
                 }
                 catch { /* never break page loading */ }
             };
