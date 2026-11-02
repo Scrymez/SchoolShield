@@ -1,0 +1,15 @@
+# Белый список сайтов. Работает ТОЛЬКО в режиме установки:  Install.cmd -WebMode Whitelist
+# В этом режиме браузеры открывают лишь перечисленные здесь сайты, всё остальное заблокировано.
+# Один домен в строке, без http://. Поддомены разрешаются автоматически.
+# Это примеры — замените на сайты вашей школы.
+
+resh.edu.ru
+uchi.ru
+yaklass.ru
+sdamgia.ru
+fipi.ru
+school-collection.edu.ru
+openedu.ru
+wikipedia.org
+khanacademy.org
+gosuslugi.ru

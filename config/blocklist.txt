@@ -1,0 +1,42 @@
+# Сайты, которые браузеры (Chrome, Edge, Firefox) блокируют всегда (политика URLBlocklist).
+# Один домен в строке, без http://. Блокируются и все поддомены.
+# Применяется установщиком: после правки запустите Install.cmd ещё раз.
+
+# --- порно (на случай обхода DNS-фильтра) ---
+pornhub.com
+xvideos.com
+xnxx.com
+xhamster.com
+redtube.com
+youporn.com
+spankbang.com
+eporner.com
+tube8.com
+brazzers.com
+onlyfans.com
+chaturbate.com
+stripchat.com
+bongacams.com
+nhentai.net
+e-hentai.org
+rule34.xxx
+porn.com
+sex.com
+
+# --- анонимайзеры, веб-прокси, VPN-сайты ---
+croxyproxy.com
+proxysite.com
+hidemyass.com
+hide.me
+kproxy.com
+4everproxy.com
+hidester.com
+vpnbook.com
+anonymouse.org
+torproject.org
+
+# --- магазины расширений (установка расширений и так запрещена политикой) ---
+chromewebstore.google.com
+chrome.google.com/webstore
+microsoftedge.microsoft.com/addons
+addons.mozilla.org

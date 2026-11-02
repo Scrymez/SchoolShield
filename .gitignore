@@ -1,0 +1,15 @@
+# build output
+dist/
+bin/
+obj/
+*.user
+
+# secrets: the update signing key lives outside the repository on purpose
+*.pem
+*.key
+*.pfx
+.env
+
+# OS / editor noise
+.DS_Store
+Thumbs.db

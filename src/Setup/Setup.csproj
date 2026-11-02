@@ -1,0 +1,41 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    SchoolShield-Setup.exe: one-file installer. The program files travel inside it as payload.zip
+    (built by tools/build.sh; pass -p:PayloadZip=... to point at another archive).
+  -->
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net48</TargetFramework>
+    <LangVersion>7.3</LangVersion>
+    <AssemblyName>SchoolShield-Setup</AssemblyName>
+    <RootNamespace>SchoolShield.Setup</RootNamespace>
+    <PlatformTarget>x64</PlatformTarget>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>..\..\assets\schoolshield.ico</ApplicationIcon>
+    <Version>2.0.0</Version>
+    <Authors>Латипов С.А.</Authors>
+    <Company>Латипов С.А.</Company>
+    <Product>SchoolShield</Product>
+    <Copyright>© 2026 Латипов С.А.</Copyright>
+    <Description>Установщик SchoolShield</Description>
+    <Nullable>disable</Nullable>
+    <DebugType>none</DebugType>
+    <PayloadZip Condition="'$(PayloadZip)' == ''">..\..\dist\payload.zip</PayloadZip>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="..\Shared\*.cs" LinkBase="Shared" />
+    <EmbeddedResource Include="$(PayloadZip)" LogicalName="payload.zip" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Reference Include="System.Windows.Forms" />
+    <Reference Include="System.Drawing" />
+    <Reference Include="System.IO.Compression" />
+    <Reference Include="System.IO.Compression.FileSystem" />
+    <Reference Include="Microsoft.CSharp" />
+    <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.3" PrivateAssets="all" />
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,1182 @@
+using System;
+using System.Collections.Generic;
+using System.Diagnostics;
+using System.Drawing;
+using System.Drawing.Drawing2D;
+using System.IO;
+using System.Threading;
+using System.Windows.Forms;
+
+namespace SchoolShield
+{
+    /// <summary>One page of the launcher (Home, Programs, Documents...).</summary>
+    internal abstract class Section : UserControl
+    {
+        protected readonly MainForm Main;
+
+        protected Section(MainForm main)
+        {
+            Main = main;
+            Dock = DockStyle.Fill;
+            BackColor = Theme.Background;
+            ForeColor = Theme.Text;
+            DoubleBuffered = true;
+            Padding = new Padding(32, 4, 32, 8);
+        }
+
+        public abstract string Id { get; }
+        public abstract string Title { get; }
+        public abstract string Glyph { get; }
+        public virtual void OnShown() { }
+        public virtual void OnSearch(string query) { }
+        public virtual void OnAppsChanged() { }
+
+        protected static Button Chip(string text, bool selected, EventHandler click)
+        {
+            Button b = UiKit.Flat(text, click);
+            b.BackColor = selected ? Theme.Accent : Theme.Card;
+            b.ForeColor = selected ? (Theme.Dark ? Color.FromArgb(7, 12, 24) : Color.White) : Theme.Text;
+            b.Margin = new Padding(0, 0, 8, 8);
+            return b;
+        }
+    }
+
+    // ====================================================================== HOME
+
+    internal sealed class HomeSection : Section
+    {
+        private readonly FlowLayoutPanel root = new FlowLayoutPanel();
+
+        public HomeSection(MainForm main) : base(main)
+        {
+            root.Dock = DockStyle.Fill;
+            root.FlowDirection = FlowDirection.TopDown;
+            root.WrapContents = false;
+            root.AutoScroll = true;
+            root.BackColor = Theme.Background;
+            Controls.Add(root);
+            Resize += delegate { FitWidths(); };
+        }
+
+        public override string Id { get { return "home"; } }
+        public override string Title { get { return "Главная"; } }
+        public override string Glyph { get { return ""; } }
+
+        public override void OnShown() { Rebuild(); }
+        public override void OnAppsChanged() { Rebuild(); }
+
+        private void FitWidths()
+        {
+            int w = Math.Max(300, root.ClientSize.Width - 30);
+            foreach (Control c in root.Controls) c.MaximumSize = new Size(w, 0);
+        }
+
+        private void Rebuild()
+        {
+            root.SuspendLayout();
+            foreach (Control c in new List<Control>(Controls2(root))) { root.Controls.Remove(c); c.Dispose(); }
+
+            int h = DateTime.Now.Hour;
+            string hello = h < 6 ? "Доброй ночи!" : h < 12 ? "Доброе утро!" : h < 18 ? "Добрый день!" : "Добрый вечер!";
+            Label g = new Label();
+            g.Text = hello;
+            g.Font = Theme.UiFont(26, FontStyle.Bold);
+            g.ForeColor = Theme.Text;
+            g.AutoSize = true;
+            g.Margin = new Padding(0, 4, 0, 0);
+            root.Controls.Add(g);
+
+            string bell = Bells.Status(Main.Cfg, DateTime.Now);
+            root.Controls.Add(UiKit.Hint(bell ?? Main.Cfg.Subtitle));
+
+            root.Controls.Add(UiKit.Heading("Быстрый доступ"));
+            FlowLayoutPanel quick = UiKit.Flow();
+            AddQuick(quick, "apps", "Программы", "");
+            AddQuick(quick, "docs", "Документы", "");
+            AddQuick(quick, "media", "Фото, видео, музыка", "");
+            AddQuick(quick, "files", "Мои файлы", "");
+            AddQuick(quick, "web", "Интернет", "");
+            root.Controls.Add(quick);
+
+            root.Controls.Add(UiKit.Heading("Избранное"));
+            FlowLayoutPanel fav = UiKit.Flow();
+            foreach (string name in Main.User.Favorites)
+            {
+                AppEntry e = Main.FindApp(name);
+                if (e != null) fav.Controls.Add(Main.MakeAppTile(e));
+            }
+            if (fav.Controls.Count == 0) root.Controls.Add(UiKit.Hint("Нажмите правой кнопкой мыши на программе и выберите «В избранное»."));
+            else root.Controls.Add(fav);
+
+            List<AppEntry> recent = new List<AppEntry>();
+            foreach (string name in Main.User.RecentApps)
+            {
+                AppEntry e = Main.FindApp(name);
+                if (e != null) recent.Add(e);
+            }
+            if (recent.Count > 0)
+            {
+                root.Controls.Add(UiKit.Heading("Недавно открывали"));
+                FlowLayoutPanel rec = UiKit.Flow();
+                foreach (AppEntry e in recent) rec.Controls.Add(Main.MakeAppTile(e));
+                root.Controls.Add(rec);
+            }
+            FitWidths();
+            root.ResumeLayout();
+        }
+
+        private static IEnumerable<Control> Controls2(Control c)
+        {
+            foreach (Control x in c.Controls) yield return x;
+        }
+
+        private void AddQuick(FlowLayoutPanel flow, string section, string title, string glyph)
+        {
+            if (!Main.Cfg.SectionEnabled(section)) return;
+            TileControl t = new TileControl(title, glyph);
+            t.Activated += delegate { Main.ShowSection(section); };
+            flow.Controls.Add(t);
+        }
+    }
+
+    // ====================================================================== PROGRAMS
+
+    internal sealed class AppsSection : Section
+    {
+        private readonly FlowLayoutPanel chips = new FlowLayoutPanel();
+        private readonly FlowLayoutPanel grid = new FlowLayoutPanel();
+        private readonly Label empty = new Label();
+        private string category = "all";
+        private string query = "";
+        private readonly List<TileControl> tiles = new List<TileControl>();
+
+        public AppsSection(MainForm main) : base(main)
+        {
+            grid.Dock = DockStyle.Fill;
+            grid.AutoScroll = true;
+            grid.BackColor = Theme.Background;
+            grid.WrapContents = true;
+            grid.FlowDirection = FlowDirection.LeftToRight;
+
+            chips.Dock = DockStyle.Top;
+            chips.Height = 54;
+            chips.BackColor = Theme.Background;
+            chips.WrapContents = true;
+            chips.Padding = new Padding(0, 6, 0, 0);
+
+            empty.Dock = DockStyle.Top;
+            empty.Height = 40;
+            empty.ForeColor = Theme.Muted;
+            empty.Font = Theme.UiFont(12);
+            empty.Visible = false;
+            empty.Text = "Ничего не найдено.";
+
+            Controls.Add(grid);
+            Controls.Add(empty);
+            Controls.Add(chips);
+        }
+
+        public override string Id { get { return "apps"; } }
+        public override string Title { get { return "Программы"; } }
+        public override string Glyph { get { return ""; } }
+
+        public override void OnShown() { if (tiles.Count == 0) Build(); else Apply(); }
+        public override void OnAppsChanged() { Build(); }
+        public override void OnSearch(string q) { query = q ?? ""; Apply(); }
+
+        public void SelectCategory(string id) { category = id; Build(); }
+
+        private void Build()
+        {
+            grid.SuspendLayout();
+            foreach (TileControl t in tiles) { grid.Controls.Remove(t); t.Dispose(); }
+            tiles.Clear();
+            foreach (AppEntry e in Main.Apps)
+            {
+                TileControl t = Main.MakeAppTile(e);
+                tiles.Add(t);
+                grid.Controls.Add(t);
+            }
+            grid.ResumeLayout();
+
+            chips.SuspendLayout();
+            foreach (Control c in new List<Control>(ChipControls())) { chips.Controls.Remove(c); c.Dispose(); }
+            chips.Controls.Add(Chip("Все (" + Main.Apps.Count + ")", category == "all", delegate { SelectCategory("all"); }));
+            List<string> ids = new List<string>();
+            foreach (CategoryRule r in Main.Cfg.CategoryRules) ids.Add(r.Id);
+            ids.Add(AppCatalog.OtherId);
+            foreach (string id in ids)
+            {
+                int n = 0;
+                foreach (AppEntry e in Main.Apps) if (e.Category == id) n++;
+                if (n == 0) continue;
+                string captured = id;
+                chips.Controls.Add(Chip(Main.CategoryName(id) + " (" + n + ")", category == id, delegate { SelectCategory(captured); }));
+            }
+            chips.ResumeLayout();
+            Apply();
+        }
+
+        private IEnumerable<Control> ChipControls()
+        {
+            foreach (Control c in chips.Controls) yield return c;
+        }
+
+        private void Apply()
+        {
+            grid.SuspendLayout();
+            int visible = 0;
+            foreach (TileControl t in tiles)
+            {
+                bool ok = (category == "all" || t.Entry.Category == category)
+                    && (query.Length == 0 || t.Entry.Name.IndexOf(query, StringComparison.CurrentCultureIgnoreCase) >= 0);
+                t.Visible = ok;
+                if (ok) visible++;
+            }
+            grid.ResumeLayout();
+            empty.Visible = visible == 0;
+            empty.Text = Main.Apps.Count == 0 ? "Программы загружаются…" : "Ничего не найдено.";
+        }
+
+        public void RefreshIcons() { foreach (TileControl t in tiles) t.Invalidate(); }
+    }
+
+    // ====================================================================== DOCUMENTS
+
+    internal sealed class DocsSection : Section
+    {
+        private readonly FlowLayoutPanel chips = new FlowLayoutPanel();
+        private readonly ListView list = UiKit.List(true);
+        private readonly Label status = new Label();
+        private readonly ImageList icons = new ImageList();
+        private List<FileItem> all = new List<FileItem>();
+        private string tab = "all";
+        private string query = "";
+        private DateTime lastScan = DateTime.MinValue;
+        private int scanId;
+
+        private static readonly string[][] Tabs = new string[][] {
+            new string[] { "all", "Все" },
+            new string[] { "doc", "Документы" },
+            new string[] { "ppt", "Презентации" },
+            new string[] { "xls", "Таблицы" },
+            new string[] { "book", "PDF и книги" },
+            new string[] { "txt", "Текст" }
+        };
+
+        public DocsSection(MainForm main) : base(main)
+        {
+            icons.ColorDepth = ColorDepth.Depth32Bit;
+            icons.ImageSize = new Size(32, 32);
+            list.LargeImageList = icons;
+            list.TileSize = new Size(440, 56);
+            list.Columns.Add("Папка", 200);
+            list.Columns.Add("Изменён", 120);
+            list.ItemActivate += delegate { OpenSelected(); };
+            list.MouseUp += OnMouseUp;
+
+            status.Dock = DockStyle.Top;
+            status.Height = 30;
+            status.ForeColor = Theme.Muted;
+            status.Font = Theme.UiFont(10.5f);
+
+            chips.Dock = DockStyle.Top;
+            chips.Height = 54;
+            chips.BackColor = Theme.Background;
+            chips.Padding = new Padding(0, 6, 0, 0);
+
+            Controls.Add(list);
+            Controls.Add(status);
+            Controls.Add(chips);
+        }
+
+        public override string Id { get { return "docs"; } }
+        public override string Title { get { return "Документы"; } }
+        public override string Glyph { get { return ""; } }
+
+        public override void OnShown()
+        {
+            if ((DateTime.Now - lastScan).TotalSeconds > 6) Scan();
+            else Rebuild();
+        }
+
+        public override void OnSearch(string q) { query = q ?? ""; Rebuild(); }
+
+        private static bool WantKind(FileKind k)
+        {
+            return k == FileKind.Document || k == FileKind.Presentation || k == FileKind.Table
+                || k == FileKind.Book || k == FileKind.Text;
+        }
+
+        private void Scan()
+        {
+            lastScan = DateTime.Now;
+            int id = ++scanId;
+            status.Text = "Идёт поиск документов…";
+            List<FileRoot> roots = FileRoots.Resolve(Main.Cfg);
+            ThreadPool.QueueUserWorkItem(delegate
+            {
+                List<FileItem> found = FileIndex.Scan(roots, WantKind, 6000);
+                try
+                {
+                    BeginInvoke(new Action(delegate
+                    {
+                        if (id != scanId) return;
+                        all = found;
+                        Rebuild();
+                    }));
+                }
+                catch { }
+            });
+        }
+
+        private bool Match(FileItem f)
+        {
+            switch (tab)
+            {
+                case "doc": if (f.Kind != FileKind.Document) return false; break;
+                case "ppt": if (f.Kind != FileKind.Presentation) return false; break;
+                case "xls": if (f.Kind != FileKind.Table) return false; break;
+                case "book": if (f.Kind != FileKind.Book) return false; break;
+                case "txt": if (f.Kind != FileKind.Text) return false; break;
+            }
+            return query.Length == 0 || f.Name.IndexOf(query, StringComparison.CurrentCultureIgnoreCase) >= 0;
+        }
+
+        private int CountOf(string t)
+        {
+            int n = 0;
+            string saved = tab;
+            tab = t;
+            string q = query;
+            query = "";
+            foreach (FileItem f in all) if (Match(f)) n++;
+            tab = saved;
+            query = q;
+            return n;
+        }
+
+        private void Rebuild()
+        {
+            chips.SuspendLayout();
+            foreach (Control c in new List<Control>(ChipControls())) { chips.Controls.Remove(c); c.Dispose(); }
+            foreach (string[] t in Tabs)
+            {
+                string id = t[0];
+                chips.Controls.Add(Chip(t[1] + " (" + CountOf(id) + ")", tab == id, delegate { tab = id; Rebuild(); }));
+            }
+            chips.ResumeLayout();
+
+            list.BeginUpdate();
+            list.Items.Clear();
+            int shown = 0;
+            foreach (FileItem f in all)
+            {
+                if (!Match(f)) continue;
+                if (shown++ >= 1500) break;
+                string ext = Path.GetExtension(f.Name).ToLowerInvariant();
+                if (!icons.Images.ContainsKey(ext))
+                {
+                    Bitmap ic = ShellIcons.Get(ext, false);
+                    if (ic != null) icons.Images.Add(ext, ic);
+                }
+                ListViewItem it = new ListViewItem(f.Name);
+                it.ImageKey = icons.Images.ContainsKey(ext) ? ext : null;
+                it.SubItems.Add(Path.GetFileName(f.Folder));
+                it.SubItems.Add(f.Modified.ToString("dd.MM.yyyy") + "  •  " + FileIndex.Size(f.Size));
+                it.Tag = f;
+                list.Items.Add(it);
+            }
+            list.EndUpdate();
+            status.Text = shown == 0 ? "Здесь пока ничего нет. Файлы появятся, когда вы сохраните их в «Мои документы»." : "Найдено файлов: " + shown;
+        }
+
+        private IEnumerable<Control> ChipControls()
+        {
+            foreach (Control c in chips.Controls) yield return c;
+        }
+
+        private FileItem Selected()
+        {
+            return list.SelectedItems.Count == 0 ? null : list.SelectedItems[0].Tag as FileItem;
+        }
+
+        private void OpenSelected()
+        {
+            FileItem f = Selected();
+            if (f != null) Main.OpenFile(f.Path);
+        }
+
+        private void OnMouseUp(object s, MouseEventArgs e)
+        {
+            if (e.Button != MouseButtons.Right) return;
+            ListViewItem it = list.GetItemAt(e.X, e.Y);
+            if (it == null) return;
+            it.Selected = true;
+            Menus.ForFile(Main, ((FileItem)it.Tag).Path, false, null);
+        }
+    }
+
+    // ====================================================================== MEDIA
+
+    internal sealed class MediaSection : Section
+    {
+        private readonly FlowLayoutPanel chips = new FlowLayoutPanel();
+        private readonly ListView pictures = UiKit.List(false);
+        private readonly ListView others = UiKit.List(true);
+        private readonly Label status = new Label();
+        private readonly ImageList thumbs = new ImageList();
+        private readonly ImageList icons = new ImageList();
+        private string tab = "img";
+        private string query = "";
+        private int loadId;
+        private DateTime lastScan = DateTime.MinValue;
+
+        public MediaSection(MainForm main) : base(main)
+        {
+            thumbs.ColorDepth = ColorDepth.Depth32Bit;
+            thumbs.ImageSize = new Size(120, 120);
+            pictures.LargeImageList = thumbs;
+            pictures.ItemActivate += delegate { OpenFrom(pictures); };
+            pictures.MouseUp += delegate (object s, MouseEventArgs e) { Popup(pictures, e); };
+
+            icons.ColorDepth = ColorDepth.Depth32Bit;
+            icons.ImageSize = new Size(32, 32);
+            others.LargeImageList = icons;
+            others.TileSize = new Size(440, 56);
+            others.Columns.Add("Папка", 200);
+            others.Columns.Add("Изменён", 120);
+            others.ItemActivate += delegate { OpenFrom(others); };
+            others.MouseUp += delegate (object s, MouseEventArgs e) { Popup(others, e); };
+            others.Visible = false;
+
+            status.Dock = DockStyle.Top;
+            status.Height = 30;
+            status.ForeColor = Theme.Muted;
+            status.Font = Theme.UiFont(10.5f);
+
+            chips.Dock = DockStyle.Top;
+            chips.Height = 54;
+            chips.BackColor = Theme.Background;
+            chips.Padding = new Padding(0, 6, 0, 0);
+
+            Controls.Add(pictures);
+            Controls.Add(others);
+            Controls.Add(status);
+            Controls.Add(chips);
+            BuildChips();
+        }
+
+        public override string Id { get { return "media"; } }
+        public override string Title { get { return "Фото, видео, музыка"; } }
+        public override string Glyph { get { return ""; } }
+
+        public override void OnShown()
+        {
+            if ((DateTime.Now - lastScan).TotalSeconds > 10) LoadMedia();
+        }
+
+        public override void OnSearch(string q) { query = q ?? ""; LoadMedia(); }
+
+        private void BuildChips()
+        {
+            chips.SuspendLayout();
+            foreach (Control c in new List<Control>(ChipControls())) { chips.Controls.Remove(c); c.Dispose(); }
+            chips.Controls.Add(Chip("Изображения", tab == "img", delegate { tab = "img"; BuildChips(); LoadMedia(); }));
+            chips.Controls.Add(Chip("Видео", tab == "vid", delegate { tab = "vid"; BuildChips(); LoadMedia(); }));
+            chips.Controls.Add(Chip("Музыка", tab == "aud", delegate { tab = "aud"; BuildChips(); LoadMedia(); }));
+            chips.ResumeLayout();
+        }
+
+        private IEnumerable<Control> ChipControls()
+        {
+            foreach (Control c in chips.Controls) yield return c;
+        }
+
+        private FileKind WantedKind()
+        {
+            return tab == "img" ? FileKind.Image : tab == "vid" ? FileKind.Video : FileKind.Audio;
+        }
+
+        private void LoadMedia()
+        {
+            lastScan = DateTime.Now;
+            int id = ++loadId;
+            FileKind kind = WantedKind();
+            pictures.Visible = kind == FileKind.Image;
+            others.Visible = kind != FileKind.Image;
+            pictures.Items.Clear();
+            others.Items.Clear();
+            status.Text = "Идёт поиск…";
+            string q = query;
+            List<FileRoot> roots = FileRoots.Resolve(Main.Cfg);
+
+            Thread t = new Thread(delegate ()
+            {
+                List<FileItem> found = FileIndex.Scan(roots, delegate (FileKind k) { return k == kind; }, kind == FileKind.Image ? 400 : 3000);
+                found = found.FindAll(delegate (FileItem f) { return q.Length == 0 || f.Name.IndexOf(q, StringComparison.CurrentCultureIgnoreCase) >= 0; });
+                if (kind == FileKind.Image) LoadPictures(id, found);
+                else Post(id, delegate { ShowList(found); });
+            });
+            t.IsBackground = true;
+            t.Priority = ThreadPriority.BelowNormal;
+            t.Start();
+        }
+
+        private void Post(int id, Action a)
+        {
+            try
+            {
+                BeginInvoke(new Action(delegate { if (id == loadId) a(); }));
+            }
+            catch { }
+        }
+
+        private void ShowList(List<FileItem> found)
+        {
+            others.BeginUpdate();
+            foreach (FileItem f in found)
+            {
+                string ext = Path.GetExtension(f.Name).ToLowerInvariant();
+                if (!icons.Images.ContainsKey(ext))
+                {
+                    Bitmap ic = ShellIcons.Get(ext, false);
+                    if (ic != null) icons.Images.Add(ext, ic);
+                }
+                ListViewItem it = new ListViewItem(f.Name);
+                it.ImageKey = icons.Images.ContainsKey(ext) ? ext : null;
+                it.SubItems.Add(Path.GetFileName(f.Folder));
+                it.SubItems.Add(f.Modified.ToString("dd.MM.yyyy") + "  •  " + FileIndex.Size(f.Size));
+                it.Tag = f;
+                others.Items.Add(it);
+            }
+            others.EndUpdate();
+            status.Text = found.Count == 0 ? "Здесь пока ничего нет." : "Найдено файлов: " + found.Count;
+        }
+
+        // Runs on a worker thread: builds thumbnails and asks the AI filter before showing each picture.
+        private void LoadPictures(int id, List<FileItem> found)
+        {
+            Post(id, delegate
+            {
+                thumbs.Images.Clear();
+                status.Text = found.Count == 0 ? "Здесь пока ничего нет." : "Загрузка изображений: " + found.Count;
+            });
+            NsfwEngine engine = Main.Cfg.Ai.Enabled && Main.Cfg.Ai.HideInGallery ? NsfwEngine.TryGet() : null;
+            int hidden = 0;
+            int index = 0;
+            foreach (FileItem f in found)
+            {
+                if (id != loadId) return;
+                Bitmap thumb = null;
+                bool blocked = false;
+                try
+                {
+                    using (FileStream fs = new FileStream(f.Path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
+                    using (Image img = Image.FromStream(fs, false, false))
+                    {
+                        if (engine != null)
+                        {
+                            using (Bitmap bmp = new Bitmap(img))
+                                blocked = Main.IsPictureBlocked(f.Path, engine, bmp);
+                        }
+                        thumb = blocked ? BlockedThumb() : Thumb(img);
+                    }
+                }
+                catch { thumb = null; }
+                if (thumb == null) continue;
+                if (blocked) hidden++;
+                FileItem item = f;
+                Bitmap tb = thumb;
+                bool isBlocked = blocked;
+                int my = index++;
+                Post(id, delegate
+                {
+                    thumbs.Images.Add(tb);
+                    tb.Dispose();
+                    ListViewItem it = new ListViewItem(isBlocked ? "Скрыто фильтром" : item.Name);
+                    it.ImageIndex = thumbs.Images.Count - 1;
+                    it.Tag = isBlocked ? null : item;
+                    pictures.Items.Add(it);
+                });
+            }
+            Post(id, delegate
+            {
+                status.Text = "Изображений: " + pictures.Items.Count + (hidden > 0 ? "   •   скрыто фильтром: " + hidden : "");
+            });
+        }
+
+        private static Bitmap Thumb(Image img)
+        {
+            const int S = 120;
+            Bitmap t = new Bitmap(S, S);
+            using (Graphics g = Graphics.FromImage(t))
+            {
+                g.Clear(Theme.Card);
+                g.InterpolationMode = InterpolationMode.HighQualityBicubic;
+                float k = Math.Min((float)S / img.Width, (float)S / img.Height);
+                int w = Math.Max(1, (int)(img.Width * k)), h = Math.Max(1, (int)(img.Height * k));
+                g.DrawImage(img, (S - w) / 2, (S - h) / 2, w, h);
+            }
+            return t;
+        }
+
+        private static Bitmap BlockedThumb()
+        {
+            const int S = 120;
+            Bitmap t = new Bitmap(S, S);
+            using (Graphics g = Graphics.FromImage(t))
+            using (StringFormat sf = new StringFormat())
+            {
+                g.Clear(Theme.Card);
+                g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.ClearTypeGridFit;
+                sf.Alignment = StringAlignment.Center;
+                sf.LineAlignment = StringAlignment.Center;
+                using (Font f = Theme.IconFont(36))
+                using (SolidBrush b = new SolidBrush(Theme.Danger))
+                    g.DrawString("", f, b, new Rectangle(0, 10, S, 70), sf);
+                using (Font f = Theme.UiFont(9))
+                using (SolidBrush b = new SolidBrush(Theme.Muted))
+                    g.DrawString("скрыто", f, b, new Rectangle(0, 80, S, 30), sf);
+            }
+            return t;
+        }
+
+        private void OpenFrom(ListView lv)
+        {
+            if (lv.SelectedItems.Count == 0) return;
+            FileItem f = lv.SelectedItems[0].Tag as FileItem;
+            if (f != null) Main.OpenFile(f.Path);
+        }
+
+        private void Popup(ListView lv, MouseEventArgs e)
+        {
+            if (e.Button != MouseButtons.Right) return;
+            ListViewItem it = lv.GetItemAt(e.X, e.Y);
+            if (it == null || !(it.Tag is FileItem)) return;
+            it.Selected = true;
+            Menus.ForFile(Main, ((FileItem)it.Tag).Path, false, null);
+        }
+    }
+
+    // ====================================================================== FILE MANAGER
+
+    /// <summary>
+    /// The only way to browse files. Limited to the allowed folders (documents, desktop, downloads, pictures...);
+    /// there is no path box, no drives list and no way up past a root.
+    /// </summary>
+    internal sealed class FilesSection : Section
+    {
+        private sealed class Actions : FileManagerActions
+        {
+            private readonly FilesSection s;
+            public Actions(FilesSection section) { s = section; }
+            public override bool CanModify { get { return s.CanModifyHere(); } }
+            public override void Enter(string folder) { s.Navigate(folder); }
+            public override void Copy() { s.DoCopy(false); }
+            public override void Cut() { s.DoCopy(true); }
+            public override void Rename() { s.DoRename(); }
+            public override void Delete() { s.DoDelete(); }
+        }
+
+        private readonly Actions actions;
+        private readonly ListView list = UiKit.List(true);
+        private readonly ImageList icons = new ImageList();
+        private readonly FlowLayoutPanel bar = new FlowLayoutPanel();
+        private readonly Label where = new Label();
+        private readonly Button binButton;
+        private readonly Stack<string> back = new Stack<string>();
+        private List<FileRoot> roots = new List<FileRoot>();
+        private string current;                       // null = list of roots
+        private List<string> clip = new List<string>();
+        private bool clipCut;
+        private string query = "";
+
+        public FilesSection(MainForm main) : base(main)
+        {
+            actions = new Actions(this);
+            icons.ColorDepth = ColorDepth.Depth32Bit;
+            icons.ImageSize = new Size(32, 32);
+            list.LargeImageList = icons;
+            list.TileSize = new Size(440, 56);
+            list.MultiSelect = true;
+            list.Columns.Add("Размер", 100);
+            list.Columns.Add("Изменён", 120);
+            list.ItemActivate += delegate { OpenSelected(); };
+            list.MouseUp += OnMouseUp;
+            list.KeyDown += OnKey;
+
+            bar.Dock = DockStyle.Top;
+            bar.Height = 52;
+            bar.BackColor = Theme.Background;
+            bar.Padding = new Padding(0, 6, 0, 0);
+            AddTool("", "Назад", delegate { GoBack(); });
+            AddTool("", "Вверх", delegate { GoUp(); });
+            AddTool("", "Обновить", delegate { Reload(); });
+            AddTool("", "Новая папка", delegate { DoNewFolder(); });
+            AddTool("", "Копировать", delegate { DoCopy(false); });
+            AddTool("", "Вырезать", delegate { DoCopy(true); });
+            AddTool("", "Вставить", delegate { DoPaste(); });
+            AddTool("", "Переименовать", delegate { DoRename(); });
+            AddTool("", "Удалить", delegate { DoDelete(); });
+            binButton = AddTool("\uE74D", "Очистить корзину (только администратор)", delegate { Main.EmptyRecycleBin(); });
+            binButton.Text = "Очистить корзину";
+            binButton.Font = Theme.UiFont(10.5f);
+            binButton.BackColor = Theme.Danger;
+            binButton.ForeColor = Color.White;
+            binButton.Visible = false;
+
+            where.Dock = DockStyle.Top;
+            where.Height = 32;
+            where.ForeColor = Theme.Muted;
+            where.Font = Theme.UiFont(11);
+
+            Controls.Add(list);
+            Controls.Add(where);
+            Controls.Add(bar);
+        }
+
+        public override string Id { get { return "files"; } }
+        public override string Title { get { return "Мои файлы"; } }
+        public override string Glyph { get { return ""; } }
+
+        private Button AddTool(string glyph, string tip, EventHandler click)
+        {
+            Button b = UiKit.Flat(glyph, click);
+            b.Font = Theme.IconFont(14);
+            b.Padding = new Padding(8, 4, 8, 4);
+            ToolTip t = new ToolTip();
+            t.SetToolTip(b, tip);
+            bar.Controls.Add(b);
+            return b;
+        }
+
+        public override void OnShown()
+        {
+            binButton.Visible = State.AdminMode;   // the recycle bin can be emptied by the administrator only
+            roots = FileRoots.Resolve(Main.Cfg);
+            if (current != null && FileRoots.RootOf(roots, current) == null) current = null;
+            Reload();
+        }
+
+        public override void OnSearch(string q) { query = q ?? ""; Reload(); }
+
+        // ---------------------------------------------------------------- navigation
+
+        public void Navigate(string folder)
+        {
+            if (folder != null)
+            {
+                roots = FileRoots.Resolve(Main.Cfg);
+                if (FileRoots.RootOf(roots, folder) == null) { Ui.Toast("Эта папка недоступна."); return; }
+            }
+            if (current != null || folder != null) back.Push(current);
+            current = folder;
+            Reload();
+        }
+
+        /// <summary>Jump to a file's folder and select it (from the "Show in Files" menu item).</summary>
+        public void Reveal(string file)
+        {
+            roots = FileRoots.Resolve(Main.Cfg);
+            string dir = Path.GetDirectoryName(file);
+            if (FileRoots.RootOf(roots, dir) == null) return;
+            current = dir;
+            Reload();
+            foreach (ListViewItem it in list.Items)
+                if (string.Equals(it.Tag as string, file, StringComparison.OrdinalIgnoreCase)) { it.Selected = true; it.EnsureVisible(); break; }
+        }
+
+        private void GoBack()
+        {
+            if (back.Count == 0) return;
+            current = back.Pop();
+            Reload();
+        }
+
+        private void GoUp()
+        {
+            if (current == null) return;
+            FileRoot r = FileRoots.RootOf(roots, current);
+            if (r == null || string.Equals(FileRoots.Normalize(current), r.Path, StringComparison.OrdinalIgnoreCase)) current = null;
+            else current = Path.GetDirectoryName(current);
+            Reload();
+        }
+
+        private void AddIcon(string key, Bitmap bmp)
+        {
+            if (bmp != null && !icons.Images.ContainsKey(key)) icons.Images.Add(key, bmp);
+        }
+
+        private void Reload()
+        {
+            list.BeginUpdate();
+            list.Items.Clear();
+            AddIcon("<dir>", ShellIcons.Get("", true));
+
+            if (current == null)
+            {
+                where.Text = "Выберите папку";
+                foreach (FileRoot r in roots)
+                {
+                    ListViewItem it = new ListViewItem(r.Name + (r.ReadOnly ? "  (только чтение)" : ""));
+                    it.ImageKey = icons.Images.ContainsKey("<dir>") ? "<dir>" : null;
+                    it.SubItems.Add("");
+                    it.SubItems.Add("");
+                    it.Tag = r.Path;
+                    list.Items.Add(it);
+                }
+            }
+            else
+            {
+                FileRoot root = FileRoots.RootOf(roots, current);
+                string rel = root == null ? "" : current.Substring(Math.Min(current.Length, root.Path.Length));
+                where.Text = (root == null ? "" : root.Name) + rel.Replace('\\', '›') + (root != null && root.ReadOnly ? "   (только чтение)" : "");
+                try
+                {
+                    List<string> dirs = new List<string>(Directory.GetDirectories(current));
+                    List<string> files = new List<string>(Directory.GetFiles(current));
+                    dirs.Sort(StringComparer.CurrentCultureIgnoreCase);
+                    files.Sort(StringComparer.CurrentCultureIgnoreCase);
+                    foreach (string d in dirs) AddEntry(d, true);
+                    foreach (string f in files) AddEntry(f, false);
+                }
+                catch (Exception ex) { where.Text += "   —   " + ex.Message; }
+            }
+            list.EndUpdate();
+        }
+
+        private void AddEntry(string path, bool isDir)
+        {
+            string name = Path.GetFileName(path);
+            if (query.Length > 0 && name.IndexOf(query, StringComparison.CurrentCultureIgnoreCase) < 0) return;
+            try
+            {
+                FileAttributes a = File.GetAttributes(path);
+                if ((a & (FileAttributes.Hidden | FileAttributes.System)) != 0) return;
+            }
+            catch { return; }
+
+            string key = "<dir>";
+            if (!isDir)
+            {
+                key = (Path.GetExtension(path) ?? "").ToLowerInvariant();
+                AddIcon(key, ShellIcons.Get(key, false));
+            }
+            ListViewItem it = new ListViewItem(name);
+            it.ImageKey = icons.Images.ContainsKey(key) ? key : null;
+            if (isDir)
+            {
+                it.SubItems.Add("");
+                it.SubItems.Add(Directory.GetLastWriteTime(path).ToString("dd.MM.yyyy"));
+            }
+            else
+            {
+                FileInfo fi = new FileInfo(path);
+                it.SubItems.Add(FileIndex.Size(fi.Length));
+                it.SubItems.Add(fi.LastWriteTime.ToString("dd.MM.yyyy"));
+            }
+            it.Tag = path;
+            list.Items.Add(it);
+        }
+
+        // ---------------------------------------------------------------- selection and menu
+
+        private List<string> SelectedPaths()
+        {
+            List<string> r = new List<string>();
+            foreach (ListViewItem it in list.SelectedItems) r.Add((string)it.Tag);
+            return r;
+        }
+
+        private void OpenSelected()
+        {
+            if (list.SelectedItems.Count == 0) return;
+            string p = (string)list.SelectedItems[0].Tag;
+            if (Directory.Exists(p)) Navigate(p);
+            else Main.OpenFile(p);
+        }
+
+        private void OnMouseUp(object s, MouseEventArgs e)
+        {
+            if (e.Button != MouseButtons.Right) return;
+            ListViewItem it = list.GetItemAt(e.X, e.Y);
+            if (it == null) return;
+            if (!it.Selected) { list.SelectedItems.Clear(); it.Selected = true; }
+            string p = (string)it.Tag;
+            Menus.ForFile(Main, p, Directory.Exists(p), current == null ? null : actions);
+        }
+
+        private void OnKey(object s, KeyEventArgs e)
+        {
+            if (e.KeyCode == Keys.Back) { GoUp(); e.Handled = true; }
+            else if (e.KeyCode == Keys.F2) { DoRename(); e.Handled = true; }
+            else if (e.KeyCode == Keys.Delete) { DoDelete(); e.Handled = true; }
+            else if (e.Control && e.KeyCode == Keys.C) { DoCopy(false); e.Handled = true; }
+            else if (e.Control && e.KeyCode == Keys.X) { DoCopy(true); e.Handled = true; }
+            else if (e.Control && e.KeyCode == Keys.V) { DoPaste(); e.Handled = true; }
+        }
+
+        // ---------------------------------------------------------------- operations (all stay inside allowed roots)
+
+        private bool CanModifyHere()
+        {
+            if (current == null) return false;
+            FileRoot r = FileRoots.RootOf(roots, current);
+            return r != null && !r.ReadOnly;
+        }
+
+        private bool Forbidden(string name)
+        {
+            string ext = Path.GetExtension(name);
+            return ext.Length > 0 && Main.Cfg.ForbiddenExtensions.Exists(delegate (string x)
+            {
+                return string.Equals(x, ext, StringComparison.OrdinalIgnoreCase);
+            });
+        }
+
+        private static bool ValidName(string name)
+        {
+            return !string.IsNullOrWhiteSpace(name) && name.IndexOfAny(Path.GetInvalidFileNameChars()) < 0 && name != "." && name != "..";
+        }
+
+        private string Unique(string folder, string name)
+        {
+            string target = Path.Combine(folder, name);
+            if (!File.Exists(target) && !Directory.Exists(target)) return target;
+            string stem = Path.GetFileNameWithoutExtension(name), ext = Path.GetExtension(name);
+            for (int i = 2; i < 1000; i++)
+            {
+                target = Path.Combine(folder, stem + " (" + i + ")" + ext);
+                if (!File.Exists(target) && !Directory.Exists(target)) return target;
+            }
+            return Path.Combine(folder, Guid.NewGuid().ToString("N") + ext);
+        }
+
+        private void DoCopy(bool cut)
+        {
+            List<string> sel = SelectedPaths();
+            if (sel.Count == 0) return;
+            if (cut && !CanModifyHere()) { Ui.Toast("Здесь нельзя перемещать файлы."); return; }
+            clip = sel;
+            clipCut = cut;
+        }
+
+        private void DoPaste()
+        {
+            if (!CanModifyHere()) { Ui.Toast("Сюда нельзя вставлять файлы."); return; }
+            foreach (string src in clip)
+            {
+                try
+                {
+                    string name = Path.GetFileName(src);
+                    bool isDir = Directory.Exists(src);
+                    if (!isDir && Forbidden(name)) { Ui.Toast("Файлы этого типа запрещены."); continue; }
+                    string dst = Unique(current, name);
+                    if (isDir)
+                    {
+                        if (dst.StartsWith(src + "\\", StringComparison.OrdinalIgnoreCase)) continue;   // into itself
+                        if (clipCut) Microsoft.VisualBasic.FileIO.FileSystem.MoveDirectory(src, dst);
+                        else Microsoft.VisualBasic.FileIO.FileSystem.CopyDirectory(src, dst);
+                    }
+                    else if (clipCut) File.Move(src, dst);
+                    else File.Copy(src, dst);
+                }
+                catch (Exception ex) { Ui.Toast("Не удалось: " + ex.Message); }
+            }
+            if (clipCut) clip.Clear();
+            Reload();
+        }
+
+        private void DoNewFolder()
+        {
+            if (!CanModifyHere()) { Ui.Toast("Здесь нельзя создавать папки."); return; }
+            string name = Microsoft.VisualBasic.Interaction.InputBox("Название новой папки:", "Новая папка", "Новая папка");
+            if (!ValidName(name)) return;
+            try { Directory.CreateDirectory(Unique(current, name.Trim())); }
+            catch (Exception ex) { Ui.Toast("Не удалось: " + ex.Message); }
+            Reload();
+        }
+
+        private void DoRename()
+        {
+            List<string> sel = SelectedPaths();
+            if (sel.Count != 1 || !CanModifyHere()) return;
+            string src = sel[0];
+            string old = Path.GetFileName(src);
+            string name = Microsoft.VisualBasic.Interaction.InputBox("Новое имя:", "Переименовать", old);
+            if (!ValidName(name) || name == old) return;
+            bool isDir = Directory.Exists(src);
+            if (!isDir && Forbidden(name)) { Ui.Toast("Файлы этого типа запрещены."); return; }
+            try
+            {
+                string dst = Path.Combine(Path.GetDirectoryName(src), name.Trim());
+                if (File.Exists(dst) || Directory.Exists(dst)) { Ui.Toast("Такое имя уже есть."); return; }
+                if (isDir) Directory.Move(src, dst); else File.Move(src, dst);
+            }
+            catch (Exception ex) { Ui.Toast("Не удалось: " + ex.Message); }
+            Reload();
+        }
+
+        private void DoDelete()
+        {
+            List<string> sel = SelectedPaths();
+            if (sel.Count == 0 || !CanModifyHere()) return;
+            if (!Main.Cfg.StudentCanDelete) { Ui.Toast("Удаление отключено администратором."); return; }
+            string what = sel.Count == 1 ? "«" + Path.GetFileName(sel[0]) + "»" : "выбранные элементы (" + sel.Count + ")";
+            if (MessageBox.Show(FindForm(), "Удалить " + what + " в корзину?", "Удаление", MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes) return;
+            foreach (string p in sel)
+            {
+                try
+                {
+                    if (Directory.Exists(p))
+                        Microsoft.VisualBasic.FileIO.FileSystem.DeleteDirectory(p, Microsoft.VisualBasic.FileIO.UIOption.OnlyErrorDialogs, Microsoft.VisualBasic.FileIO.RecycleOption.SendToRecycleBin);
+                    else
+                        Microsoft.VisualBasic.FileIO.FileSystem.DeleteFile(p, Microsoft.VisualBasic.FileIO.UIOption.OnlyErrorDialogs, Microsoft.VisualBasic.FileIO.RecycleOption.SendToRecycleBin);
+                    Log.Write("files", "Удалено в корзину: " + p);
+                }
+                catch (Exception ex) { Ui.Toast("Не удалось: " + ex.Message); }
+            }
+            Reload();
+        }
+    }
+
+    // ====================================================================== INTERNET
+
+    internal sealed class WebSection : Section
+    {
+        private readonly FlowLayoutPanel root = new FlowLayoutPanel();
+
+        public WebSection(MainForm main) : base(main)
+        {
+            root.Dock = DockStyle.Fill;
+            root.FlowDirection = FlowDirection.TopDown;
+            root.WrapContents = false;
+            root.AutoScroll = true;
+            root.BackColor = Theme.Background;
+            Controls.Add(root);
+            Resize += delegate { Fit(); };
+        }
+
+        public override string Id { get { return "web"; } }
+        public override string Title { get { return "Интернет"; } }
+        public override string Glyph { get { return ""; } }
+
+        public override void OnShown() { Rebuild(); }
+        public override void OnAppsChanged() { Rebuild(); }
+
+        private void Fit()
+        {
+            int w = Math.Max(300, root.ClientSize.Width - 30);
+            foreach (Control c in root.Controls) c.MaximumSize = new Size(w, 0);
+        }
+
+        private void Rebuild()
+        {
+            root.SuspendLayout();
+            List<Control> old = new List<Control>();
+            foreach (Control c in root.Controls) old.Add(c);
+            foreach (Control c in old) { root.Controls.Remove(c); c.Dispose(); }
+
+            root.Controls.Add(UiKit.Heading("Браузеры"));
+            FlowLayoutPanel browsers = UiKit.Flow();
+            foreach (AppEntry e in Main.Apps)
+                if (e.Category == "internet") browsers.Controls.Add(Main.MakeAppTile(e));
+            if (browsers.Controls.Count == 0) root.Controls.Add(UiKit.Hint("Браузер не найден. Попросите администратора установить его для всех пользователей."));
+            else root.Controls.Add(browsers);
+
+            if (Main.Cfg.Links.Count > 0)
+            {
+                root.Controls.Add(UiKit.Heading("Полезные сайты"));
+                FlowLayoutPanel links = UiKit.Flow();
+                foreach (LinkItem l in Main.Cfg.Links)
+                {
+                    if (l == null || string.IsNullOrEmpty(l.Url)) continue;
+                    TileControl t = new TileControl(l.Name, "");
+                    string url = l.Url;
+                    t.Activated += delegate { Main.OpenUrl(url); };
+                    links.Controls.Add(t);
+                }
+                root.Controls.Add(links);
+            }
+            Fit();
+            root.ResumeLayout();
+        }
+    }
+
+    // ====================================================================== SYSTEM
+
+    internal sealed class SystemSection : Section
+    {
+        private readonly FlowLayoutPanel root = new FlowLayoutPanel();
+
+        public SystemSection(MainForm main) : base(main)
+        {
+            root.Dock = DockStyle.Fill;
+            root.FlowDirection = FlowDirection.TopDown;
+            root.WrapContents = false;
+            root.AutoScroll = true;
+            root.BackColor = Theme.Background;
+            Controls.Add(root);
+        }
+
+        public override string Id { get { return "system"; } }
+        public override string Title { get { return "Компьютер"; } }
+        public override string Glyph { get { return ""; } }
+
+        public override void OnShown() { Rebuild(); }
+
+        private void Rebuild()
+        {
+            root.SuspendLayout();
+            List<Control> old = new List<Control>();
+            foreach (Control c in root.Controls) old.Add(c);
+            foreach (Control c in old) { root.Controls.Remove(c); c.Dispose(); }
+
+            root.Controls.Add(UiKit.Heading("Звук"));
+            if (AudioControl.Available)
+            {
+                TrackBar tb = new TrackBar();
+                tb.Minimum = 0;
+                tb.Maximum = 100;
+                tb.TickFrequency = 10;
+                tb.Width = 420;
+                tb.Value = (int)Math.Round(AudioControl.Volume * 100);
+                tb.Scroll += delegate { AudioControl.Volume = tb.Value / 100f; };
+                root.Controls.Add(tb);
+                CheckBox mute = new CheckBox();
+                mute.Text = "Выключить звук";
+                mute.ForeColor = Theme.Text;
+                mute.Font = Theme.UiFont(11);
+                mute.AutoSize = true;
+                mute.Checked = AudioControl.Muted;
+                mute.CheckedChanged += delegate { AudioControl.Muted = mute.Checked; };
+                root.Controls.Add(mute);
+            }
+            else root.Controls.Add(UiKit.Hint("Управление звуком недоступно на этом компьютере."));
+
+            root.Controls.Add(UiKit.Heading("Оформление"));
+            FlowLayoutPanel theme = UiKit.Flow();
+            theme.Controls.Add(UiKit.Flat(Theme.Dark ? "Светлая тема" : "Тёмная тема", delegate { Main.ToggleTheme(); }));
+            root.Controls.Add(theme);
+
+            root.Controls.Add(UiKit.Heading("Об этом компьютере"));
+            root.Controls.Add(UiKit.Hint("Компьютер: " + Environment.MachineName));
+            root.Controls.Add(UiKit.Hint("Пользователь: " + Environment.UserName));
+            root.Controls.Add(UiKit.Hint("SchoolShield " + AppInfo.VersionString + "  •  " + Release.Author));
+            root.Controls.Add(UiKit.Hint("Параметры Windows и панель управления закрыты. Нужна помощь — обратитесь к учителю."));
+
+            if (Main.Cfg.AllowStudentShutdown || Main.Cfg.AllowStudentRestart)
+            {
+                root.Controls.Add(UiKit.Heading("Питание"));
+                FlowLayoutPanel power = UiKit.Flow();
+                if (Main.Cfg.AllowStudentShutdown)
+                    power.Controls.Add(UiKit.Accent("Выключить компьютер", delegate { Main.Power(false); }));
+                if (Main.Cfg.AllowStudentRestart)
+                    power.Controls.Add(UiKit.Flat("Перезагрузить", delegate { Main.Power(true); }));
+                root.Controls.Add(power);
+            }
+            root.ResumeLayout();
+        }
+    }
+}
