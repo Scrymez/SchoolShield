@@ -295,6 +295,13 @@ namespace SchoolShield
             try
             {
                 string title = core.DocumentTitle;
+                if (policy.IsGameText(title))
+                {
+                    Log.Write("web", "Игровая страница закрыта: " + title);
+                    Ui.Toast("Игры сейчас запрещены.");
+                    ShowHtml(policy.BlockedPage("Игры сейчас запрещены администратором.", "", Theme.Dark));
+                    return;
+                }
                 if (!policy.IsBadText(title)) return;
                 Log.Write("web", "Запрещённое слово в заголовке страницы: " + title);
                 Ui.Toast("Запрещённый контент. Страница закрыта.");

@@ -30,6 +30,8 @@ namespace SchoolShield
         private Label titleLabel, bellLabel, clockLabel;
         private SearchBox search;
         private readonly System.Windows.Forms.Timer wifiTimer = new System.Windows.Forms.Timer();
+        private readonly System.Windows.Forms.Timer configTimer = new System.Windows.Forms.Timer();
+        private DateTime configStamp;
         private readonly ToolTip sidebarTips = new ToolTip();
         private Section current;
         private bool suppressSearch;
@@ -345,8 +347,34 @@ namespace SchoolShield
                 System.Threading.ThreadPool.QueueUserWorkItem(delegate { try { Wifi.Enforce(Cfg); } catch { } });
             };
             wifiTimer.Start();
+
+            // The administrator may flip the "Games" switch in the panel (another process): pick it up without a restart.
+            configStamp = Config.Stamp();
+            configTimer.Interval = 4000;
+            configTimer.Tick += delegate { CheckConfigChange(); };
+            configTimer.Start();
+
             ReloadCatalog();
             Activate();
+        }
+
+        private void CheckConfigChange()
+        {
+            try
+            {
+                DateTime stamp = Config.Stamp();
+                if (stamp == configStamp) return;
+                configStamp = stamp;
+                bool before = State.GamesAllowed;
+                Config fresh = Config.Load();            // also publishes State.GamesAllowed and State.GameExceptions
+                Cfg.AllowGames = fresh.AllowGames;
+                Cfg.GameExceptions = fresh.GameExceptions;
+                if (before == State.GamesAllowed) return;
+                Log.Write("games", State.GamesAllowed ? "Игры разрешены администратором" : "Игры запрещены администратором");
+                ReloadCatalog();
+                Ui.Toast(State.GamesAllowed ? "Администратор разрешил игры." : "Игры снова запрещены.");
+            }
+            catch { }
         }
 
         private void AddChord(string spec)
@@ -426,6 +454,7 @@ namespace SchoolShield
             {
                 hotTimer.Stop();
                 wifiTimer.Stop();
+                configTimer.Stop();
                 if (holdOverlay != null) holdOverlay.Dispose();
                 clockTimer.Stop();
                 if (hook != null) hook.Dispose();

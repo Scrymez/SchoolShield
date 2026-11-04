@@ -1,0 +1,165 @@
+# Игровые сайты и мини-игры, которые закрыты у ученика, пока в панели администратора ИГРЫ ЗАПРЕЩЕНЫ.
+# Тумблер «Игры» — на вкладке «Состояние»; исключения (что открывать даже при запрете) — «Настройки».
+# Один адрес в строке, без http://. Закрываются и все поддомены.
+#   домен          закрывает домен и поддомены:            poki.com
+#   домен/путь     закрывает раздел сайта:                 yandex.ru/games   (www. и m. учитываются сами)
+#   имя.*          закрывает имя на любой доменной зоне:   friv.*  (только встроенный браузер)
+# Для Chrome/Edge/Firefox эти строки попадают в политики установщика (после «Применить защиту заново»); порядок важен:
+# в политики Chrome помещается около 1000 записей вместе со списком 18+, поэтому самое важное стоит первым.
+# Список обновляется вместе с программой. Свои игровые сайты добавляйте в blocklist.txt (они закрыты всегда).
+# Учебные игры и тренажёры (Kahoot, Wordwall, LearningApps, Scratch, Учи.ру, ЯКласс и т. п.) сюда намеренно не входят.
+
+# ===== Яндекс Игры и PlayHop (главная цель) =====
+yandex.ru/games
+yandex.com/games
+yandex.by/games
+yandex.kz/games
+yandex.uz/games
+yandex.com.tr/games
+yandex.az/games
+yandex.com.am/games
+yandex.com.ge/games
+ya.ru/games
+games.yandex.ru
+games.yandex.com
+games.yandex.by
+games.yandex.kz
+games.s3.yandex.net
+playhop.com
+playhop.*
+
+# ===== ВКонтакте, Одноклассники, Mail.ru, VK Play =====
+vk.com/games
+vk.com/apps
+vk.ru/games
+vk.ru/apps
+ok.ru/games
+ok.ru/game
+vkplay.ru
+games.mail.ru
+my.games
+igra.mail.ru
+
+# ===== Мини-игры в браузере: мир =====
+poki.com
+crazygames.com
+miniclip.com
+y8.com
+friv.com
+kizi.com
+kiz10.com
+agame.com
+silvergames.com
+gamesgames.com
+girlsgogames.com
+gameflare.com
+coolmathgames.com
+hoodamath.com
+addictinggames.com
+armorgames.com
+kongregate.com
+newgrounds.com
+arkadium.com
+pogo.com
+bigfishgames.com
+gamepix.com
+gamedistribution.com
+itch.io
+itch.zone
+gamejolt.com
+tetris.com
+play2048.co
+2048game.com
+akinator.com
+bubbleshooter.net
+orteil.dashnet.org
+unblockedgames.*
+unblockedgames66.com
+unblockedgames76.com
+unblockedgames77.com
+classroom6x.com
+classroom6x.*
+crazygames.*
+poki.*
+friv.*
+kizi.*
+miniclip.*
+agame.*
+addictinggames.*
+kongregate.*
+newgrounds.*
+coolmathgames.*
+
+# ===== «.io»-игры и популярные браузерные игры =====
+agar.io
+slither.io
+diep.io
+krunker.io
+shellshock.io
+zombs.io
+paper-io.com
+skribbl.io
+gartic.io
+wormate.io
+surviv.io
+starve.io
+moomoo.io
+taming.io
+bonk.io
+smashkarts.io
+venge.io
+deeeep.io
+evowars.io
+mope.io
+arras.io
+yohoho.io
+brofist.io
+bloxd.io
+kour.io
+slowroads.io
+1v1.lol
+hole-io.com
+tankionline.com
+tankionline.*
+tanki.su
+
+# ===== Roblox, Minecraft, Steam и игровые лаунчеры =====
+roblox.com
+rbxcdn.com
+roblox.*
+minecraft.net
+mojang.com
+tlauncher.org
+steampowered.com
+steamcommunity.com
+steamgames.com
+epicgames.com
+fortnite.com
+battle.net
+blizzard.com
+riotgames.com
+leagueoflegends.com
+playvalorant.com
+rockstargames.com
+supercell.com
+brawlstars.com
+clashofclans.com
+clashroyale.com
+geforcenow.com
+boosteroid.com
+playkey.net
+
+# ===== Российские игровые сайты и «танки» =====
+igroutka.ru
+igroutka.*
+worldoftanks.ru
+worldoftanks.eu
+worldoftanks.com
+wargaming.net
+warthunder.ru
+warthunder.com
+gaijin.net
+lesta.ru
+warface.com
+playrix.com
+plarium.com

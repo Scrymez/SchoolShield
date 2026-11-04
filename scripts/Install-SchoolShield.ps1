@@ -384,14 +384,31 @@ $blocklist = @((Read-DomainList (Join-Path $shippedCfg 'blocklist.txt')) + (Read
     Where-Object { $_ -notmatch '\*' } | Select-Object -Unique
 $whitelist = @((Read-DomainList (Join-Path $shippedCfg 'whitelist.txt')) + (Read-DomainList (Join-Path $DataDir 'whitelist.txt'))) |
     Where-Object { $_ -notmatch '\*' } | Select-Object -Unique
+# Games: while "AllowGames" is false in config.json the game sites (Yandex Games first) join the block list; the administrator's
+# exceptions become an allow list (they win over the block list in Chrome/Edge/Firefox).
+$allowGames = $false
+$gameExceptions = @()
+try {
+    $cfgObj = Get-Content -LiteralPath (Join-Path $DataDir 'config.json') -Raw -Encoding UTF8 | ConvertFrom-Json
+    if ($cfgObj.AllowGames -eq $true) { $allowGames = $true }
+    if ($cfgObj.GameExceptions) { $gameExceptions = @($cfgObj.GameExceptions | ForEach-Object { ([string]$_).Trim().ToLowerInvariant() } | Where-Object { $_ -and $_ -notmatch '\*' }) }
+} catch { Write-Warn2 ('Не прочитан config.json (игры считаются запрещёнными): ' + $_.Exception.Message) }
+$games = @()
+if (-not $allowGames) {
+    $games = @((Read-DomainList (Join-Path $shippedCfg 'games.txt')) + (Read-DomainList (Join-Path $DataDir 'games.txt'))) |
+        Where-Object { $_ -notmatch '\*' } | Select-Object -Unique
+}
 # Chrome and Edge accept about 1000 entries in URLBlocklist. The built-in browser reads the full lists itself.
-$policyLimit = 900
+# The 18+ list goes first, then the games (Yandex Games sits at the top of games.txt), so the most important entries always fit.
+$policyLimit = 980
+$blocklist = @(@($blocklist) + @($games) | Select-Object -Unique)
 if (@($blocklist).Count -gt $policyLimit) {
-    Write-Warn2 ("В списке {0} сайтов; Chrome/Edge получат первые {1} (встроенный браузер использует все)." -f @($blocklist).Count, $policyLimit)
+    Write-Warn2 ("В списках {0} сайтов; Chrome/Edge получат первые {1} (встроенный браузер использует все)." -f @($blocklist).Count, $policyLimit)
     $blocklist = @($blocklist | Select-Object -First $policyLimit)
 }
 $blocklist = @($blocklist)
 $whitelist = @($whitelist)
+$allowEntries = @(@($whitelist) + @($gameExceptions) | Select-Object -Unique)
 
 function Set-ChromiumPolicy {
     param([string]$Root, [bool]$IsEdge)
@@ -425,9 +442,9 @@ function Set-ChromiumPolicy {
     $block += $blocklist
     if ($WebMode -eq 'Whitelist') {
         $block += '*'
-        Set-RegList ($Root + '\URLAllowlist') $whitelist
+        Set-RegList ($Root + '\URLAllowlist') $allowEntries
     } else {
-        Set-RegList ($Root + '\URLAllowlist') @()
+        Set-RegList ($Root + '\URLAllowlist') $gameExceptions
     }
     Set-RegList ($Root + '\URLBlocklist') $block
 }
@@ -441,17 +458,27 @@ Set-Reg $ff 'BlockAboutConfig' 1
 Set-Reg ($ff + '\DNSOverHTTPS') 'Enabled' 0
 Set-Reg ($ff + '\DNSOverHTTPS') 'Locked' 1
 Set-Reg $ff 'ExtensionSettings' '{"*":{"installation_mode":"blocked"}}' 'String'
+function ConvertTo-FirefoxPattern([string]$Entry) {
+    # "domain" -> any scheme, the domain and its sub-domains ('*.' also matches the bare domain); "domain/path" -> that section of the site
+    $i = $Entry.IndexOf('/')
+    if ($i -lt 0) { return ('*://*.' + $Entry + '/*') }
+    return ('*://*.' + $Entry.Substring(0, $i) + $Entry.Substring($i).TrimEnd('/') + '*')
+}
 $ffBlock = @('file:///*')
-foreach ($d in $blocklist) { if ($d -notmatch '/') { $ffBlock += ('*://*.' + $d + '/*') } }   # '*.' also matches the bare domain
+foreach ($d in $blocklist) { $ffBlock += (ConvertTo-FirefoxPattern $d) }
+$ffGameAllow = @()
+foreach ($d in $gameExceptions) { $ffGameAllow += (ConvertTo-FirefoxPattern $d) }
 if ($WebMode -eq 'Whitelist') {
     Set-RegList ($ff + '\WebsiteFilter\Block') @('<all_urls>')
     $ffAllow = @()
-    foreach ($d in $whitelist) { $ffAllow += ('*://*.' + $d + '/*') }
+    foreach ($d in $allowEntries) { $ffAllow += (ConvertTo-FirefoxPattern $d) }
     Set-RegList ($ff + '\WebsiteFilter\Exceptions') $ffAllow
 } else {
     Set-RegList ($ff + '\WebsiteFilter\Block') $ffBlock
+    Set-RegList ($ff + '\WebsiteFilter\Exceptions') $ffGameAllow
 }
 Write-Ok ("Режим интернета: {0}; скачивания: {1}; инкогнито, расширения, DoH, инструменты разработчика выключены." -f $WebMode, $Downloads)
+if ($allowGames) { Write-Ok 'Игры разрешены: игровые сайты в политики не вошли.' } else { Write-Ok ("Игры запрещены: в политики вошло игровых сайтов - {0} (Яндекс Игры первыми); исключений: {1}." -f @($games).Count, @($gameExceptions).Count) }
 
 # ---------------------------------------------------------------- 7. DNS
 
@@ -570,7 +597,7 @@ if ($NoShell) {
     }
     Set-Reg $OwnKey 'InstallDir' $InstallDir 'String'
     Set-Reg $OwnKey 'StudentUser' $StudentUser 'String'
-    Set-Reg $OwnKey 'Version' '2.0.0' 'String'
+    Set-Reg $OwnKey 'Version' '2.3.0' 'String'
     Set-Reg $Winlogon 'Shell' ('"' + $exeInstalled + '"') 'String'
     Write-Ok 'Лаунчер зарегистрирован как оболочка. Администраторам он откроет обычный рабочий стол.'
 }

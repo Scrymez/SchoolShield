@@ -118,6 +118,7 @@ namespace SchoolShield
             foreach (string a in cfg.AlwaysShow)
                 if (string.Equals(a, name, StringComparison.OrdinalIgnoreCase)) return true;
             if (!cfg.IsTeacher() && Config.IsBuiltInHidden(name)) return false;
+            if (!State.GamesAllowed && Config.IsGameApp(name)) return false;
             foreach (string h in cfg.HiddenApps)
                 if (h.Length > 0 && name.IndexOf(h, StringComparison.OrdinalIgnoreCase) >= 0) return false;
 

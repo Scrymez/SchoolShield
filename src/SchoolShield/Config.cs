@@ -163,6 +163,11 @@ namespace SchoolShield
         public List<string> AllowedPaths = new List<string>();
         public List<string> ExemptUsers = new List<string>();
 
+        // Games: false = mini-games on sites (Yandex Games, Poki, CrazyGames, Roblox...), game launchers and game programs are closed.
+        // GameExceptions: sites that stay open even then (one per line, "domain" or "domain/path").
+        public bool AllowGames = false;
+        public List<string> GameExceptions = new List<string>();
+
         // Removable drives for the student: "block" | "readonly" | "allow".
         public string UsbMode = "block";
 
@@ -182,7 +187,7 @@ namespace SchoolShield
                 "microsoft store", "магазин", "выполнить", "проводник", "file explorer",
                 "services", "службы", "управление компьютером", "computer management",
                 "конфигурация системы", "system configuration", "просмотр событий", "event viewer",
-                "schoolshield", "steam", "epic games", "battle.net", "origin", "roblox", "minecraft", "discord"
+                "schoolshield", "discord"
             });
             BlockedProcesses.AddRange(new string[] {
                 "cmd", "powershell", "powershell_ise", "pwsh", "wt", "regedit", "reg", "taskmgr",
@@ -307,6 +312,7 @@ namespace SchoolShield
             AllowStudentRestart = true;
             AdminClickGesture = false;
             ShowAllInstalled = true;
+            AllowGames = true;                      // teachers may play; only 18+ is filtered
 
             HiddenApps.Clear();
             HiddenApps.Add("schoolshield");          // the launcher does not list itself
@@ -329,6 +335,44 @@ namespace SchoolShield
             if (Math.Abs(Ai.Threshold - 0.90) < 0.0001) Ai.Threshold = 0.93;
         }
 
+        /// <summary>Game launchers and game programs: hidden from the launcher while games are forbidden.</summary>
+        public static readonly string[] BuiltInGameApps = new string[] {
+            "steam", "epic games", "roblox", "minecraft", "battle.net", "blizzard", "ea app", "ubisoft", "uplay", "riot client",
+            "league of legends", "valorant", "genshin", "fortnite", "wargaming", "world of tanks", "мир танков", "lesta", "vk play",
+            "vkplay", "game center", "gamecenter", "tlauncher", "bluestacks", "solitaire", "mahjong", "candy crush", "bubble witch",
+            "microsoft casual", "asphalt", "hay day", "clash of clans", "brawl stars", "geforce now", "playkey", "playrix", "plarium"
+        };
+
+        /// <summary>Processes of game launchers and games, closed by the guard while games are forbidden.</summary>
+        public static readonly string[] GameProcesses = new string[] {
+            "steam", "steamwebhelper", "steamservice", "epicgameslauncher", "epicwebhelper", "eosoverlayrenderer",
+            "robloxplayerbeta", "robloxplayerlauncher", "robloxstudiobeta", "robloxcrashhandler", "minecraft", "minecraftlauncher",
+            "tlauncher", "battle.net", "origin", "eadesktop", "ealauncher", "ubisoftconnect", "upc", "uplay", "riotclientservices",
+            "riotclientux", "leagueclient", "valorant", "valorant-win64-shipping", "genshinimpact", "yuanshen",
+            "fortniteclient-win64-shipping", "fortnitelauncher", "csgo", "cs2", "dota2", "gta5", "worldoftanks", "wotlauncher", "wgc",
+            "lestagamecenter", "bluestacks", "hd-player", "solitaire"
+        };
+
+        public static bool IsGameApp(string name)
+        {
+            foreach (string g in BuiltInGameApps)
+                if (name.IndexOf(g, StringComparison.OrdinalIgnoreCase) >= 0) return true;
+            return false;
+        }
+
+        /// <summary>Games are open for this configuration (teacher edition, or the administrator switched them on).</summary>
+        public bool GamesOpen() { return IsTeacher() || AllowGames; }
+
+        public static string GameWordsPath { get { return System.IO.Path.Combine(AppInfo.InstallDir, "config", "gamewords.txt"); } }
+        public static string GamesListPath(string dir) { return System.IO.Path.Combine(dir, "games.txt"); }
+
+        /// <summary>Time stamp of config.json (the launcher polls it to pick up a changed "Games" switch without a restart).</summary>
+        public static DateTime Stamp()
+        {
+            try { return File.Exists(ConfigPath) ? File.GetLastWriteTimeUtc(ConfigPath) : DateTime.MinValue; }
+            catch { return DateTime.MinValue; }
+        }
+
         public static bool IsBuiltInHidden(string name)
         {
             foreach (string h in BuiltInHidden)
@@ -342,6 +386,14 @@ namespace SchoolShield
             CategoryRules.RemoveAll(delegate (CategoryRule x) { return x.Id == "dev"; });
             List<string> keys = new List<string>(AppCategories.Keys);
             foreach (string k in keys) if (AppCategories[k] == "dev") AppCategories[k] = "study";
+
+            // Game launchers used to be hidden for good; they now follow the "Games" switch (BuiltInGameApps).
+            HiddenApps.RemoveAll(delegate (string h)
+            {
+                foreach (string g in new string[] { "steam", "epic games", "battle.net", "origin", "roblox", "minecraft" })
+                    if (string.Equals(h, g, StringComparison.OrdinalIgnoreCase)) return true;
+                return false;
+            });
 
             List<CategoryRule> merged = new List<CategoryRule>();
             foreach (CategoryRule def in DefaultCategoryRules())
@@ -368,7 +420,18 @@ namespace SchoolShield
         public static string ExtendedBlocklistPath { get { return System.IO.Path.Combine(DataDir, "blocklist-extended.txt"); } }
         public static string DisableFlagPath { get { return System.IO.Path.Combine(DataDir, "DISABLE"); } }
 
+        /// <summary>Reads config.json and publishes the "games" switch and its exceptions to State (see State.GamesAllowed).</summary>
         public static Config Load()
+        {
+            Config c = LoadFile();
+            State.GamesAllowed = c.GamesOpen();
+            HostList ex = new HostList();
+            ex.AddRange(c.GameExceptions);
+            State.GameExceptions = ex;
+            return c;
+        }
+
+        private static Config LoadFile()
         {
             try
             {
@@ -393,6 +456,7 @@ namespace SchoolShield
                         if (c.HiddenExact == null) c.HiddenExact = new List<string>();
                         if (c.AlwaysShow == null) c.AlwaysShow = new List<string>();
                         if (string.IsNullOrEmpty(c.Edition)) c.Edition = StudentEdition;
+                        if (c.GameExceptions == null) c.GameExceptions = new List<string>();
                         c.ApplyEdition();
                         return c;
                     }

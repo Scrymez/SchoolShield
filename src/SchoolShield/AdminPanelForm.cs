@@ -609,6 +609,8 @@ namespace SchoolShield
             Row(p, ref y, "ИИ-фильтр и браузер", missing.Count == 0 ? "всё необходимое установлено" : "не хватает: " + string.Join("; ", missing.ToArray()) + " — вкладка «ИИ-фильтр» → «Исправить»", missing.Count == 0);
             Row(p, ref y, "Горячая клавиша админа", cfg.AdminHotkey + " — удерживать " + (cfg.AdminHotkeyHoldMs / 1000.0).ToString("0.0", CultureInfo.CurrentCulture) + " с", true);
             Row(p, ref y, "Папка настроек и журнала", Config.DataDir, true);
+            Row(p, ref y, "Игры", cfg.AllowGames ? "РАЗРЕШЕНЫ: ученики могут играть (тумблер ниже)"
+                : "ЗАПРЕЩЕНЫ: Яндекс Игры, Poki, CrazyGames, Roblox, Steam и другие игровые сайты и программы закрыты", !cfg.AllowGames);
             y += 14;
 
             Btn(p, configured ? "Применить защиту заново…" : "Включить защиту…", 0, y, 300, true, delegate { OpenWizard(); });
@@ -631,7 +633,43 @@ namespace SchoolShield
                     MessageBox.Show(this, "Очистка запущена в фоне.", "Корзина");
                 }
             });
+            y += 56;
+            Btn(p, cfg.AllowGames ? "Запретить игры" : "Разрешить игры", 0, y, 300, !cfg.AllowGames, delegate { ToggleGames(); });
+            Lbl(p, "Тумблер действует сразу, без перезагрузки: лаунчер подхватывает его за несколько секунд.", 316, y + 8, 520, true);
             return p;
+        }
+
+        /// <summary>The "Games" switch: allow or forbid mini-games on sites, game launchers and game programs.</summary>
+        private void ToggleGames()
+        {
+            bool allow = !cfg.AllowGames;
+            if (allow && MessageBox.Show(this, "Разрешить ученикам игры?\nОткроются Яндекс Игры, Poki, CrazyGames и другие игровые сайты, появятся игровые программы.",
+                "Игры", MessageBoxButtons.YesNo, MessageBoxIcon.Question, MessageBoxDefaultButton.Button2) != DialogResult.Yes) return;
+            cfg.AllowGames = allow;
+            try { cfg.Save(); }
+            catch (Exception ex)
+            {
+                cfg.AllowGames = !allow;
+                MessageBox.Show(this, "Не удалось сохранить: " + ex.Message, "Ошибка");
+                return;
+            }
+            Log.Write("games", allow ? "Игры разрешены (панель администратора)" : "Игры запрещены (панель администратора)");
+            RefreshBrowserPolicies(allow ? "Игры разрешены" : "Игры запрещены");
+            Show2("status");
+        }
+
+        /// <summary>Chrome, Edge and Firefox read their policies from the registry: rewrite them after the games switch or its exceptions changed.</summary>
+        private void RefreshBrowserPolicies(string title)
+        {
+            if (!Protection.Configured())
+            {
+                MessageBox.Show(this, "Сохранено. Защита ещё не включена, поэтому политики браузеров появятся при её включении.", title);
+                return;
+            }
+            ScriptRunDialog.Run(this, title + ": обновляю политики браузеров", delegate (Protection.DataReceived output)
+            {
+                return Protection.StartApply(cfg.Install, cfg.UsbMode, null, true, output);
+            });
         }
 
         private static void Row(Panel p, ref int y, string caption, string value, bool ok)
@@ -1160,6 +1198,11 @@ namespace SchoolShield
             CheckBox bDl = Chk(p, "Разрешить скачивание файлов во встроенном браузере", 0, y, cfg.Browser.AllowDownloads); y += 28;
             CheckBox gesture = Chk(p, "Терминал админа открывается и по 7 быстрым нажатиям на часы", 0, y, cfg.AdminClickGesture); y += 40;
 
+            Lbl(p, "Игры", 0, y, 300, true); y += 26;
+            CheckBox games = Chk(p, "Разрешить игры: мини-игры на сайтах, игровые лаунчеры и программы (то же, что тумблер на вкладке «Состояние»)", 0, y, cfg.AllowGames); y += 28;
+            Lbl(p, "Игровые сайты, которые открываются даже при запрете (по одному в строке: домен или домен/путь), например education.minecraft.net", 0, y, 820, true); y += 24;
+            TextBox gameEx = Memo(p, 0, y, 810, 70, string.Join(Environment.NewLine, cfg.GameExceptions.ToArray())); y += 86;
+
             Lbl(p, "Разделы лаунчера", 0, y, 300, true); y += 26;
             string[][] secs = new string[][] {
                 new string[] { "home", "Главная" }, new string[] { "apps", "Программы" }, new string[] { "docs", "Документы" },
@@ -1204,6 +1247,12 @@ namespace SchoolShield
                 cfg.Browser.BlockAdNetworks = bAds.Checked;
                 cfg.Browser.AllowDownloads = bDl.Checked;
                 cfg.AdminClickGesture = gesture.Checked;
+                bool gamesChanged = cfg.AllowGames != games.Checked;
+                List<string> exBefore = new List<string>(cfg.GameExceptions);
+                cfg.AllowGames = games.Checked;
+                cfg.GameExceptions = new List<string>();
+                foreach (string line in Lines(gameEx.Text)) if (line.Trim().Length > 0) cfg.GameExceptions.Add(line.Trim());
+                bool exChanged = string.Join("\n", exBefore.ToArray()) != string.Join("\n", cfg.GameExceptions.ToArray());
                 cfg.Sections.Clear();
                 foreach (CheckBox c in secBoxes) if (c.Checked) cfg.Sections.Add((string)c.Tag);
                 if (cfg.Sections.Count == 0) cfg.Sections.Add("home");
@@ -1211,6 +1260,7 @@ namespace SchoolShield
                 ParseBells(bells.Text);
                 ParseShared(shared.Text);
                 SaveConfig();
+                if (gamesChanged || exChanged) RefreshBrowserPolicies(cfg.AllowGames ? "Игры разрешены" : "Игры запрещены");
             });
             Btn(p, "Сменить код администратора…", 216, y, 300, false, delegate
             {

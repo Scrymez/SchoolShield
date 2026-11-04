@@ -31,6 +31,8 @@ namespace SchoolShield
         private readonly HashSet<string> allowed = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         private readonly HashSet<string> videoSites = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         private readonly List<Regex> badWords;
+        private readonly HostList games;
+        private readonly List<Regex> gameWords;
         private readonly bool whitelist;
         private readonly bool blockIp;
         private readonly bool blockAds;
@@ -59,6 +61,10 @@ namespace SchoolShield
                 foreach (string h in ReadLines(Path.Combine(dir, "adblock-domains.txt"), false)) adHosts.Add(h);
                 if (whitelist) foreach (string h in ReadLines(Path.Combine(dir, "whitelist.txt"), false)) allowed.Add(h);
             }
+            // Game sites (shipped list + the administrator's own games.txt) and the words of game pages; both are inactive while State.GamesAllowed.
+            games = HostList.FromFile(string.IsNullOrEmpty(shippedDir) ? null : Config.GamesListPath(shippedDir),
+                string.IsNullOrEmpty(dataDir) ? null : Config.GamesListPath(dataDir));
+            gameWords = string.IsNullOrEmpty(shippedDir) ? new List<Regex>() : Config.LoadBadWords(Path.Combine(shippedDir, "gamewords.txt"));
             badWords = new List<Regex>();
             if (!string.IsNullOrEmpty(shippedDir)) badWords.AddRange(Config.LoadBadWords(Path.Combine(shippedDir, Config.BadWordsFile(cfg))));
             if (!string.IsNullOrEmpty(dataDir)) badWords.AddRange(Config.LoadBadWords(Path.Combine(dataDir, Config.BadWordsExtraFile(cfg))));
@@ -178,6 +184,22 @@ namespace SchoolShield
             return TextGuard.Matches(badWords, text);
         }
 
+        public int GameEntries { get { return games.Count; } }
+
+        /// <summary>A game site, while games are forbidden and the site is not one of the administrator's exceptions.</summary>
+        public bool IsGameUrl(Uri u)
+        {
+            if (State.GamesAllowed) return false;
+            if (!games.MatchesUrl(u)) return false;
+            return !State.GameExceptions.MatchesUrl(u);
+        }
+
+        /// <summary>Words of a game page ("Яндекс Игры", "Play free online games"...), while games are forbidden.</summary>
+        public bool IsGameText(string text)
+        {
+            return !State.GamesAllowed && TextGuard.Matches(gameWords, text);
+        }
+
         // ---------------------------------------------------------------- navigation
 
         public NavDecision Check(string url, bool mainFrame, bool internalPage)
@@ -200,6 +222,7 @@ namespace SchoolShield
                 return NavDecision.Deny("Открывать сайты по IP-адресу нельзя.", host);
 
             if (IsBlockedUrl(u)) return NavDecision.Deny("Сайт заблокирован: взрослый контент или обход защиты.", host);
+            if (IsGameUrl(u)) return NavDecision.Deny("Игры сейчас запрещены администратором.", host);
 
             if (mainFrame)
             {
@@ -208,7 +231,10 @@ namespace SchoolShield
                 // Each path segment and each query value is checked on its own: "q=p+o+r+n+o" must not glue the parameter name
                 // "q" to the word.
                 foreach (string piece in UrlPieces(u))
+                {
                     if (IsBadText(piece)) return NavDecision.Deny("Запрещённый запрос или адрес.", host);
+                    if (IsGameText(piece)) return NavDecision.Deny("Игры сейчас запрещены администратором.", host);
+                }
             }
             return NavDecision.Allow(host);
         }

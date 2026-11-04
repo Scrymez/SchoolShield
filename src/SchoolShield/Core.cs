@@ -98,6 +98,12 @@ namespace SchoolShield
         public static volatile bool Windowed;
         public static volatile bool ExitRequested;
 
+        /// <summary>Games (mini-games on sites, game launchers and programs) are allowed. Set from config.json by Config.Load, so a
+        /// change made in the admin panel reaches the running launcher without a restart. Teachers always may play.</summary>
+        public static volatile bool GamesAllowed;
+        /// <summary>Game sites that stay open even while games are forbidden (admin exceptions, e.g. Minecraft Education).</summary>
+        public static volatile HostList GameExceptions = new HostList();
+
         /// <summary>The UI is a normal window: nothing is locked down (preview or teacher centre).</summary>
         public static bool Soft { get { return Preview || Windowed; } }
 

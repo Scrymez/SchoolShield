@@ -35,6 +35,8 @@ namespace SchoolShield
 
         private readonly Config cfg;
         private readonly List<Regex> bad;
+        private readonly List<Regex> gameWords;
+        private readonly HashSet<string> gameProcesses;
         private readonly HashSet<string> blocked;
         private readonly HashSet<string> forbiddenExt;
         private readonly string[] denyRoots;
@@ -57,6 +59,8 @@ namespace SchoolShield
         {
             this.cfg = cfg;
             bad = Config.LoadBadWords(cfg);
+            gameWords = Config.LoadBadWords(Config.GameWordsPath);
+            gameProcesses = new HashSet<string>(Config.GameProcesses, StringComparer.OrdinalIgnoreCase);
             blocked = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             foreach (string s in cfg.BlockedProcesses) blocked.Add(s.Trim().ToLowerInvariant().Replace(".exe", ""));
             foreach (string s in Config.BuiltInBlockedProcesses) blocked.Add(s);
@@ -137,7 +141,14 @@ namespace SchoolShield
 
                 if (cfg.CloseBadWindows && MatchesBad(w.Handle, w.Title))
                 {
-                    HandleBadWindow(w);
+                    HandleBadWindow(w, cfg.IsTeacher() ? "Материал 18+. Окно закрыто." : "Запрещённый контент. Окно закрыто.");
+                    continue;
+                }
+
+                // Games: windows of game sites and portals (titles such as "Яндекс Игры", "Poki - Play free online games").
+                if (!State.GamesAllowed && MatchesGame(w.Handle, w.Title))
+                {
+                    HandleBadWindow(w, "Игры сейчас запрещены. Окно закрыто.");
                     continue;
                 }
 
@@ -166,7 +177,7 @@ namespace SchoolShield
             foreach (IntPtr h in deadTitles) titleCache.Remove(h);
             stripped.RemoveWhere(delegate(IntPtr h) { return !present.Contains(h); });
 
-            if ((tick++ % 3) == 0 && (cfg.KillBlockedProcesses || cfg.KillOutsideProgramFiles)) CheckProcesses();
+            if ((tick++ % 3) == 0 && (cfg.KillBlockedProcesses || cfg.KillOutsideProgramFiles || !State.GamesAllowed)) CheckProcesses();
             StyleDialogs();
         }
 
@@ -217,7 +228,19 @@ namespace SchoolShield
             return isBad;
         }
 
-        private void HandleBadWindow(WinInfo w)
+        private readonly Dictionary<IntPtr, KeyValuePair<string, bool>> gameTitleCache = new Dictionary<IntPtr, KeyValuePair<string, bool>>();
+
+        private bool MatchesGame(IntPtr handle, string title)
+        {
+            KeyValuePair<string, bool> c;
+            if (gameTitleCache.TryGetValue(handle, out c) && c.Key == title) return c.Value;
+            bool isGame = gameWords.Count > 0 && TextGuard.Matches(gameWords, title);
+            gameTitleCache[handle] = new KeyValuePair<string, bool>(title, isGame);
+            if (gameTitleCache.Count > 600) gameTitleCache.Clear();
+            return isGame;
+        }
+
+        private void HandleBadWindow(WinInfo w, string message)
         {
             DateTime first;
             if (!closing.TryGetValue(w.Handle, out first))
@@ -225,7 +248,7 @@ namespace SchoolShield
                 closing[w.Handle] = DateTime.Now;
                 Strikes++;
                 Log.Write("guard", "Запрещённое окно: \"" + w.Title + "\" (pid " + w.Pid + ")" + (State.Preview ? " [preview]" : ""));
-                Raise(cfg.IsTeacher() ? "Материал 18+. Окно закрыто." : "Запрещённый контент. Окно закрыто.");
+                Raise(message);
                 if (State.Preview) return;
                 if (w.Iconic) Native.ShowWindow(w.Handle, Native.SW_RESTORE);
                 Native.PostMessage(w.Handle, Native.WM_CLOSE, IntPtr.Zero, IntPtr.Zero);
@@ -255,6 +278,12 @@ namespace SchoolShield
                     if (cfg.KillBlockedProcesses && blocked.Contains(name))
                     {
                         KillProcess(p, "запрещённая программа");
+                        continue;
+                    }
+
+                    if (!State.GamesAllowed && gameProcesses.Contains(name))
+                    {
+                        KillProcess(p, "игра или игровой лаунчер (игры запрещены)");
                         continue;
                     }
 
