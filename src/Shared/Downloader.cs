@@ -67,6 +67,8 @@ namespace SchoolShield
                         done += n;
                         if (progress != null) progress(done, total);
                     }
+                    // A mirror that closes the connection early must not leave a truncated file behind.
+                    if (total > 0 && done != total) throw new IOException("Загрузка оборвалась: получено " + done + " из " + total + " байт. Повторите попытку.");
                 }
             }
             if (File.Exists(dest)) File.Delete(dest);

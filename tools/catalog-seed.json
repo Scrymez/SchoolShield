@@ -1,0 +1,263 @@
+{
+  "_comment": "Исходные данные каталога учебных программ. tools/update-catalog.py скачивает каждый установщик, считает SHA-256 и размер, определяет тип установщика и пишет config/catalog.json. Все программы с русским интерфейсом. Нужна версия новее: поменяйте адрес и запустите скрипт.",
+  "items": [
+    {
+      "id": "libreoffice",
+      "name": "LibreOffice",
+      "category": "office",
+      "description": "Текстовый редактор, таблицы и презентации: полный аналог Microsoft Office, открывает файлы .docx, .xlsx, .pptx. Интерфейс и справка на русском.",
+      "site": "https://ru.libreoffice.org",
+      "detect": [
+        "LibreOffice"
+      ],
+      "russian": "Русский интерфейс устанавливается вместе с программой, русская справка отдельным пакетом.",
+      "packages": [
+        {
+          "url": "https://download.documentfoundation.org/libreoffice/stable/26.2.7/win/x86_64/LibreOffice_26.2.7_Win_x86-64.msi",
+          "args": "/qn /norestart UI_LANGS=ru",
+          "sha256_url": "https://download.documentfoundation.org/libreoffice/stable/26.2.7/win/x86_64/LibreOffice_26.2.7_Win_x86-64.msi.sha256"
+        },
+        {
+          "url": "https://download.documentfoundation.org/libreoffice/stable/26.2.7/win/x86_64/LibreOffice_26.2.7_Win_x86-64_helppack_ru.msi",
+          "args": "/qn /norestart",
+          "sha256_url": "https://download.documentfoundation.org/libreoffice/stable/26.2.7/win/x86_64/LibreOffice_26.2.7_Win_x86-64_helppack_ru.msi.sha256"
+        }
+      ]
+    },
+    {
+      "id": "geogebra",
+      "name": "GeoGebra Классик 5",
+      "category": "study",
+      "description": "Динамическая математика: геометрия, алгебра, графики функций, таблицы. Для уроков математики с 5 по 11 класс. Ставится для всех пользователей, Java уже внутри.",
+      "site": "https://www.geogebra.org",
+      "detect": [
+        "GeoGebra"
+      ],
+      "russian": "Русский интерфейс.",
+      "packages": [
+        {
+          "url": "https://download.geogebra.org/installers/5.4/GeoGebra-Windows-Installer-5-4-934-0.exe"
+        }
+      ]
+    },
+    {
+      "id": "stellarium",
+      "name": "Stellarium (планетарий)",
+      "category": "study",
+      "description": "Звёздное небо на экране: созвездия, планеты, затмения. Для уроков астрономии и окружающего мира.",
+      "site": "https://stellarium.org/ru/",
+      "detect": [
+        "Stellarium"
+      ],
+      "russian": "Русский интерфейс и названия созвездий.",
+      "packages": [
+        {
+          "url": "https://github.com/Stellarium/stellarium/releases/download/v26.3/stellarium-26.3-qt6-win64.exe"
+        }
+      ]
+    },
+    {
+      "id": "thonny",
+      "name": "Thonny (Python для начинающих)",
+      "category": "study",
+      "description": "Простая среда для изучения языка Python: пошаговое выполнение, наглядные переменные. Python входит в комплект.",
+      "site": "https://thonny.org",
+      "detect": [
+        "Thonny"
+      ],
+      "russian": "Русский интерфейс.",
+      "packages": [
+        {
+          "url": "https://github.com/thonny/thonny/releases/download/v5.0.1/thonny-5.0.1-x64.exe"
+        }
+      ]
+    },
+    {
+      "id": "pascalabcnet",
+      "name": "PascalABC.NET",
+      "category": "study",
+      "description": "Среда программирования на языке Паскаль, созданная для школ и вузов России. Подходит для уроков информатики и подготовки к ОГЭ и ЕГЭ.",
+      "site": "https://pascalabc.net",
+      "detect": [
+        "PascalABC.NET"
+      ],
+      "russian": "Русский интерфейс и справка.",
+      "packages": [
+        {
+          "url": "https://github.com/pascalabcnet/pascalabcnet/releases/download/3.11.0/PascalABCNETSetup.exe"
+        }
+      ]
+    },
+    {
+      "id": "kumir",
+      "name": "КуМир",
+      "category": "study",
+      "description": "Среда для школьного алгоритмического языка: исполнители «Робот», «Чертёжник», «Водолей». Используется на ОГЭ и ЕГЭ по информатике.",
+      "site": "https://www.niisi.ru/kumir/",
+      "detect": [
+        "Kumir",
+        "КуМир",
+        "Кумир"
+      ],
+      "russian": "Русский интерфейс.",
+      "packages": [
+        {
+          "url": "https://www.niisi.ru/kumir/kumir2-2.1.0-rc11-install.exe"
+        }
+      ]
+    },
+    {
+      "id": "gcompris",
+      "name": "GCompris (для младших классов)",
+      "category": "study",
+      "description": "Развивающие задания для детей 2-10 лет: счёт, чтение, логика, знакомство с компьютером. Для 1-4 классов.",
+      "site": "https://gcompris.net/index-ru.html",
+      "detect": [
+        "GCompris"
+      ],
+      "russian": "Русский интерфейс и русская озвучка заданий.",
+      "packages": [
+        {
+          "url": "https://download.kde.org/stable/gcompris/qt/windows/gcompris-qt-26.2-win64-gcc.exe",
+          "sha256_url": "https://download.kde.org/stable/gcompris/qt/windows/gcompris-qt-26.2-win64-gcc.exe.sha256"
+        }
+      ]
+    },
+    {
+      "id": "blender",
+      "name": "Blender (3D-моделирование)",
+      "category": "study",
+      "description": "Трёхмерное моделирование, анимация и подготовка моделей для 3D-печати. Версия с долгой поддержкой (LTS).",
+      "site": "https://www.blender.org",
+      "detect": [
+        "Blender"
+      ],
+      "russian": "Язык выбирается автоматически по языку Windows: на русской Windows интерфейс русский.",
+      "packages": [
+        {
+          "url": "https://download.blender.org/release/Blender4.5/blender-4.5.9-windows-x64.msi",
+          "args": "/qn /norestart",
+          "sha256_url": "https://download.blender.org/release/Blender4.5/blender-4.5.9.sha256"
+        }
+      ]
+    },
+    {
+      "id": "freecad",
+      "name": "FreeCAD (черчение и САПР)",
+      "category": "study",
+      "description": "Параметрическое 3D-проектирование и черчение: детали, сборки, чертежи. Для технологии и черчения.",
+      "site": "https://www.freecad.org",
+      "detect": [
+        "FreeCAD"
+      ],
+      "russian": "Русский интерфейс по языку Windows.",
+      "packages": [
+        {
+          "url": "https://github.com/FreeCAD/FreeCAD/releases/download/1.1.4/FreeCAD_1.1.4-Windows-x86_64-py311-installer.exe"
+        }
+      ]
+    },
+    {
+      "id": "gimp",
+      "name": "GIMP (редактор изображений)",
+      "category": "media",
+      "description": "Редактор растровой графики: обработка фотографий, рисование, коллажи. Бесплатный аналог Photoshop.",
+      "site": "https://www.gimp.org",
+      "detect": [
+        "GIMP"
+      ],
+      "russian": "Русский интерфейс по языку Windows.",
+      "packages": [
+        {
+          "url": "https://download.gimp.org/gimp/v3.2/windows/gimp-3.2.8-setup.exe",
+          "sha256_url": "https://download.gimp.org/gimp/v3.2/windows/SHA256SUMS"
+        }
+      ]
+    },
+    {
+      "id": "krita",
+      "name": "Krita (цифровая живопись)",
+      "category": "media",
+      "description": "Программа для рисования и иллюстраций на компьютере или планшете, для уроков ИЗО и мультипликации.",
+      "site": "https://krita.org/ru/",
+      "detect": [
+        "Krita"
+      ],
+      "russian": "Русский интерфейс.",
+      "packages": [
+        {
+          "url": "https://download.kde.org/stable/krita/6.0.4/krita-x64-6.0.4-setup.exe",
+          "sha256_url": "https://download.kde.org/stable/krita/6.0.4/krita-x64-6.0.4-setup.exe.sha256"
+        }
+      ]
+    },
+    {
+      "id": "audacity",
+      "name": "Audacity (запись и обработка звука)",
+      "category": "media",
+      "description": "Запись голоса, монтаж и обработка звука: для уроков музыки, подкастов, проектов.",
+      "site": "https://www.audacityteam.org",
+      "detect": [
+        "Audacity"
+      ],
+      "russian": "Русский интерфейс по языку Windows.",
+      "packages": [
+        {
+          "url": "https://github.com/audacity/audacity/releases/download/Audacity-3.7.9/audacity-win-3.7.9-64bit.exe"
+        }
+      ]
+    },
+    {
+      "id": "vlc",
+      "name": "VLC (медиапроигрыватель)",
+      "category": "media",
+      "description": "Проигрывает видео и звук любых форматов, без дополнительных кодеков.",
+      "site": "https://www.videolan.org/vlc/index.ru.html",
+      "detect": [
+        "VLC media player"
+      ],
+      "russian": "Русский интерфейс по языку Windows.",
+      "packages": [
+        {
+          "url": "https://get.videolan.org/vlc/3.0.24/win64/vlc-3.0.24-win64.msi",
+          "args": "/qn /norestart",
+          "sha256_url": "https://get.videolan.org/vlc/3.0.24/win64/vlc-3.0.24-win64.msi.sha256"
+        }
+      ]
+    },
+    {
+      "id": "7zip",
+      "name": "7-Zip (архиватор)",
+      "category": "system",
+      "description": "Создаёт и распаковывает архивы .zip, .7z, .rar и другие.",
+      "site": "https://www.7-zip.org",
+      "detect": [
+        "7-Zip"
+      ],
+      "russian": "Русский интерфейс по языку Windows.",
+      "packages": [
+        {
+          "url": "https://github.com/ip7z/7zip/releases/download/26.05/7z2605-x64.msi",
+          "args": "/qn /norestart"
+        }
+      ]
+    },
+    {
+      "id": "notepadpp",
+      "name": "Notepad++ (текстовый редактор)",
+      "category": "system",
+      "description": "Удобный редактор текстов и программного кода с подсветкой синтаксиса.",
+      "site": "https://notepad-plus-plus.org",
+      "detect": [
+        "Notepad++"
+      ],
+      "russian": "Русский интерфейс по языку Windows.",
+      "packages": [
+        {
+          "url": "https://github.com/notepad-plus-plus/notepad-plus-plus/releases/download/v8.9.8.1/npp.8.9.8.1.Installer.x64.msi",
+          "args": "/qn /norestart"
+        }
+      ]
+    }
+  ]
+}

@@ -386,6 +386,7 @@ namespace SchoolShield
                 // Teacher edition: one screen of switches, nothing about students, shells or installers.
                 Text = "SchoolShield — управление фильтром 18+";
                 Add("status", "Состояние", BuildTeacherStatus);
+                Add("software", "Учебные программы", BuildSoftware);
                 Add("lists", "Сайты и слова", BuildTeacherLists);
                 Add("ai", "ИИ-фильтр", BuildAi);
                 Add("update", "Обновления", delegate { return new UpdatePanel(null, true); });
@@ -396,6 +397,7 @@ namespace SchoolShield
             {
                 Add("status", "Состояние", BuildStatus);
                 Add("apps", "Программы", BuildApps);
+                Add("software", "Учебные программы", BuildSoftware);
                 Add("lists", "Сайты и слова", BuildLists);
                 Add("ai", "ИИ-фильтр", BuildAi);
                 Add("wifi", "Wi-Fi", BuildWifi);
@@ -688,6 +690,146 @@ namespace SchoolShield
                 MessageBoxButtons.YesNo, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2) != DialogResult.Yes) return;
             ScriptRunDialog.Run(this, "Отключение защиты", delegate (Protection.DataReceived output) { return Protection.StartRemove(output); });
             Show2("status");
+        }
+
+        // ---------------------------------------------------------------- catalog of educational programs
+
+        private Control BuildSoftware()
+        {
+            Panel p = new Panel();
+            CatalogFile cat = Catalog.Load();
+            int y = 0;
+            Lbl(p, "Бесплатные учебные программы с русским интерфейсом. Отметьте нужные и нажмите «Установить»: программа скачается с официального сайта,", 0, y, 920, true); y += 22;
+            Lbl(p, "проверится контрольная сумма, и она тихо установится для всех пользователей. У учеников новые программы появятся сами, в разделе «Учебное ПО».", 0, y, 920, true); y += 28;
+
+            string lang = System.Globalization.CultureInfo.InstalledUICulture.TwoLetterISOLanguageName;
+            if (!string.Equals(lang, "ru", StringComparison.OrdinalIgnoreCase))
+            {
+                Label warn = Lbl(p, "Windows установлена не на русском языке: большинство программ каталога откроется на языке Windows. Добавьте русский язык: Параметры → Время и язык.", 0, y, 920, false);
+                warn.ForeColor = Color.FromArgb(251, 191, 36);
+                y += 28;
+            }
+
+            if (cat.items.Count == 0)
+            {
+                Lbl(p, "Каталог не найден (config\\catalog.json). Обновите SchoolShield на вкладке «Обновления».", 0, y, 800, false);
+                return p;
+            }
+
+            DataGridView grid = new DataGridView();
+            grid.SetBounds(0, y, 840, 430);
+            grid.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right | AnchorStyles.Bottom;
+            grid.BackgroundColor = Theme.Card;
+            grid.BorderStyle = BorderStyle.None;
+            grid.EnableHeadersVisualStyles = false;
+            grid.ColumnHeadersDefaultCellStyle.BackColor = Theme.Sidebar;
+            grid.ColumnHeadersDefaultCellStyle.ForeColor = Theme.Text;
+            grid.DefaultCellStyle.BackColor = Theme.Card;
+            grid.DefaultCellStyle.ForeColor = Theme.Text;
+            grid.DefaultCellStyle.SelectionBackColor = Theme.CardHover;
+            grid.DefaultCellStyle.SelectionForeColor = Theme.Text;
+            grid.DefaultCellStyle.WrapMode = DataGridViewTriState.True;
+            grid.GridColor = Theme.Line;
+            grid.RowHeadersVisible = false;
+            grid.AllowUserToAddRows = false;
+            grid.AllowUserToDeleteRows = false;
+            grid.AllowUserToResizeRows = false;
+            grid.SelectionMode = DataGridViewSelectionMode.FullRowSelect;
+            grid.AutoSizeRowsMode = DataGridViewAutoSizeRowsMode.AllCells;
+
+            DataGridViewCheckBoxColumn cPick = new DataGridViewCheckBoxColumn();
+            cPick.HeaderText = "Установить"; cPick.Width = 90;
+            DataGridViewTextBoxColumn cName = new DataGridViewTextBoxColumn();
+            cName.HeaderText = "Программа"; cName.ReadOnly = true; cName.Width = 190;
+            DataGridViewTextBoxColumn cWhat = new DataGridViewTextBoxColumn();
+            cWhat.HeaderText = "Для чего"; cWhat.ReadOnly = true; cWhat.Width = 330;
+            DataGridViewTextBoxColumn cSize = new DataGridViewTextBoxColumn();
+            cSize.HeaderText = "Размер"; cSize.ReadOnly = true; cSize.Width = 70;
+            DataGridViewTextBoxColumn cState = new DataGridViewTextBoxColumn();
+            cState.HeaderText = "Состояние"; cState.ReadOnly = true; cState.Width = 130;
+            grid.Columns.AddRange(cPick, cName, cWhat, cSize, cState);
+
+            List<InstalledProgram> installed = Programs.Enumerate();
+            List<CatalogItem> items = new List<CatalogItem>(cat.items);
+            items.Sort(delegate (CatalogItem a, CatalogItem b)
+            {
+                int c = string.Compare(Catalog.CategoryName(a.category), Catalog.CategoryName(b.category), StringComparison.CurrentCultureIgnoreCase);
+                return c != 0 ? c : string.Compare(a.name, b.name, StringComparison.CurrentCultureIgnoreCase);
+            });
+            foreach (CatalogItem it in items)
+            {
+                string ver;
+                bool have = Catalog.IsInstalled(it, installed, out ver);
+                int row = grid.Rows.Add(false, it.name, Catalog.CategoryName(it.category) + ". " + it.description + " " + it.russian, it.size_mb + " МБ",
+                    have ? "установлена" + (ver.Length > 0 ? " " + ver : "") : "не установлена");
+                grid.Rows[row].Tag = it;
+                if (have) grid.Rows[row].Cells[4].Style.ForeColor = Color.FromArgb(74, 222, 128);
+            }
+            p.Controls.Add(grid);
+            y += 442;
+
+            Label total = Lbl(p, "", 0, y + 8, 300, true);
+            total.Anchor = AnchorStyles.Bottom | AnchorStyles.Left;
+            Action recount = delegate
+            {
+                int mb = 0, n = 0;
+                foreach (DataGridViewRow r in grid.Rows)
+                    if (r.Cells[0].Value is bool && (bool)r.Cells[0].Value) { n++; mb += ((CatalogItem)r.Tag).size_mb; }
+                total.Text = n == 0 ? "Ничего не выбрано" : "Выбрано: " + n + ", скачать около " + mb + " МБ";
+            };
+            grid.CurrentCellDirtyStateChanged += delegate { if (grid.IsCurrentCellDirty) grid.CommitEdit(DataGridViewDataErrorContexts.Commit); };
+            grid.CellValueChanged += delegate { recount(); };
+            recount();
+
+            Button install = Btn(p, "Установить выбранные", 310, y, 250, true, delegate
+            {
+                List<CatalogItem> pick = new List<CatalogItem>();
+                foreach (DataGridViewRow r in grid.Rows)
+                    if (r.Cells[0].Value is bool && (bool)r.Cells[0].Value) pick.Add((CatalogItem)r.Tag);
+                if (pick.Count == 0) { MessageBox.Show(this, "Отметьте программы галочками.", "Каталог"); return; }
+                if (MessageBox.Show(this, "Установить программ: " + pick.Count + "?\nНужен интернет. Установка идёт в фоне, окна установщиков не показываются.",
+                    "Установка", MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes) return;
+                ScriptRunDialog.RunWork(this, "Установка учебных программ", delegate (Action<string> log)
+                {
+                    int ok = 0;
+                    foreach (CatalogItem it in pick)
+                    {
+                        log("");
+                        log("=== " + it.name);
+                        if (!SoftwareInstaller.Install(it, log)) { log("НЕ УСТАНОВЛЕНО: " + it.name); continue; }
+                        string ver;
+                        if (Catalog.IsInstalled(it, Programs.Enumerate(), out ver)) { ok++; log("Готово: " + it.name + (ver.Length > 0 ? " " + ver : "")); }
+                        else
+                        {
+                            // The installer finished, but the program is not registered for all users: it probably went into the administrator's own profile,
+                            // where a student can neither see nor run it (programs run only from Windows and Program Files).
+                            log("! Установщик завершился, но программа не появилась в списке установленных для всех пользователей.");
+                            log("  Скорее всего, она поставилась только для вашей учётной записи и ученик её не запустит. Удалите её и поставьте вручную в Program Files.");
+                            Log.Write("software", it.id + ": не зарегистрирована для всех пользователей после установки");
+                        }
+                    }
+                    SoftwareInstaller.Touch();
+                    log("");
+                    log("Итог: установлено " + ok + " из " + pick.Count + ".");
+                    return ok == pick.Count;
+                });
+                Show2("software");
+            });
+            install.Anchor = AnchorStyles.Bottom | AnchorStyles.Left;
+            Button mark = Btn(p, "Отметить не установленные", 576, y, 260, false, delegate
+            {
+                foreach (DataGridViewRow r in grid.Rows)
+                    r.Cells[0].Value = ((string)r.Cells[4].Value).StartsWith("не");
+            });
+            mark.Anchor = AnchorStyles.Bottom | AnchorStyles.Left;
+            Button site = Btn(p, "Сайт программы", 852, y, 160, false, delegate
+            {
+                if (grid.CurrentRow == null) return;
+                CatalogItem it = (CatalogItem)grid.CurrentRow.Tag;
+                try { Process.Start(it.site); } catch { }
+            });
+            site.Anchor = AnchorStyles.Bottom | AnchorStyles.Left;
+            return p;
         }
 
         // ---------------------------------------------------------------- teacher edition

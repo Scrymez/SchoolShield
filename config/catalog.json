@@ -1,0 +1,346 @@
+{
+  "version": 1,
+  "updated": "2026-11-04",
+  "items": [
+    {
+      "id": "libreoffice",
+      "name": "LibreOffice",
+      "category": "office",
+      "description": "Текстовый редактор, таблицы и презентации: полный аналог Microsoft Office, открывает файлы .docx, .xlsx, .pptx. Интерфейс и справка на русском.",
+      "site": "https://ru.libreoffice.org",
+      "detect": [
+        "LibreOffice"
+      ],
+      "russian": "Русский интерфейс устанавливается вместе с программой, русская справка отдельным пакетом.",
+      "packages": [
+        {
+          "url": "https://download.documentfoundation.org/libreoffice/stable/26.2.7/win/x86_64/LibreOffice_26.2.7_Win_x86-64.msi",
+          "sha256": "480fecf759fc6393bd614fbf43753eb95a8198fc1a065d41b727e3b664cd1e59",
+          "size": 373121024,
+          "kind": "msi",
+          "installer": "msi",
+          "args": "/qn /norestart UI_LANGS=ru ALLUSERS=1"
+        },
+        {
+          "url": "https://download.documentfoundation.org/libreoffice/stable/26.2.7/win/x86_64/LibreOffice_26.2.7_Win_x86-64_helppack_ru.msi",
+          "sha256": "15e0303cf1f990bddfe0c174eba5646b56d8c0959a63b2d5411693e9c3f5b7bf",
+          "size": 3944448,
+          "kind": "msi",
+          "installer": "msi",
+          "args": "/qn /norestart ALLUSERS=1"
+        }
+      ],
+      "size_mb": 360
+    },
+    {
+      "id": "geogebra",
+      "name": "GeoGebra Классик 5",
+      "category": "study",
+      "description": "Динамическая математика: геометрия, алгебра, графики функций, таблицы. Для уроков математики с 5 по 11 класс. Ставится для всех пользователей, Java уже внутри.",
+      "site": "https://www.geogebra.org",
+      "detect": [
+        "GeoGebra"
+      ],
+      "russian": "Русский интерфейс.",
+      "packages": [
+        {
+          "url": "https://download.geogebra.org/installers/5.4/GeoGebra-Windows-Installer-5-4-934-0.exe",
+          "sha256": "00e229d386d76773d8658cb7453656690394f48015cac5ca7b7c66e1f90b44a9",
+          "size": 68777336,
+          "kind": "exe",
+          "installer": "nsis",
+          "args": "/S"
+        }
+      ],
+      "size_mb": 66
+    },
+    {
+      "id": "stellarium",
+      "name": "Stellarium (планетарий)",
+      "category": "study",
+      "description": "Звёздное небо на экране: созвездия, планеты, затмения. Для уроков астрономии и окружающего мира.",
+      "site": "https://stellarium.org/ru/",
+      "detect": [
+        "Stellarium"
+      ],
+      "russian": "Русский интерфейс и названия созвездий.",
+      "packages": [
+        {
+          "url": "https://github.com/Stellarium/stellarium/releases/download/v26.3/stellarium-26.3-qt6-win64.exe",
+          "sha256": "06d0444e02bca3ad9703e08a641270576c1df581088eb3e7549870887e039cd8",
+          "size": 489006448,
+          "kind": "exe",
+          "installer": "inno",
+          "args": "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /SP- /ALLUSERS"
+        }
+      ],
+      "size_mb": 466
+    },
+    {
+      "id": "thonny",
+      "name": "Thonny (Python для начинающих)",
+      "category": "study",
+      "description": "Простая среда для изучения языка Python: пошаговое выполнение, наглядные переменные. Python входит в комплект.",
+      "site": "https://thonny.org",
+      "detect": [
+        "Thonny"
+      ],
+      "russian": "Русский интерфейс.",
+      "packages": [
+        {
+          "url": "https://github.com/thonny/thonny/releases/download/v5.0.1/thonny-5.0.1-x64.exe",
+          "sha256": "a2b04784cd2ee7d4c22ed46865de5e8ba6eaf55950543ef9546374f53cf778a5",
+          "size": 31109656,
+          "kind": "exe",
+          "installer": "inno",
+          "args": "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /SP- /ALLUSERS"
+        }
+      ],
+      "size_mb": 30
+    },
+    {
+      "id": "pascalabcnet",
+      "name": "PascalABC.NET",
+      "category": "study",
+      "description": "Среда программирования на языке Паскаль, созданная для школ и вузов России. Подходит для уроков информатики и подготовки к ОГЭ и ЕГЭ.",
+      "site": "https://pascalabc.net",
+      "detect": [
+        "PascalABC.NET"
+      ],
+      "russian": "Русский интерфейс и справка.",
+      "packages": [
+        {
+          "url": "https://github.com/pascalabcnet/pascalabcnet/releases/download/3.11.0/PascalABCNETSetup.exe",
+          "sha256": "5cb43fd657a4439785ac811b7006e72970c00730e117dffae512fcff13d8d517",
+          "size": 27143041,
+          "kind": "exe",
+          "installer": "nsis",
+          "args": "/S"
+        }
+      ],
+      "size_mb": 26
+    },
+    {
+      "id": "kumir",
+      "name": "КуМир",
+      "category": "study",
+      "description": "Среда для школьного алгоритмического языка: исполнители «Робот», «Чертёжник», «Водолей». Используется на ОГЭ и ЕГЭ по информатике.",
+      "site": "https://www.niisi.ru/kumir/",
+      "detect": [
+        "Kumir",
+        "КуМир",
+        "Кумир"
+      ],
+      "russian": "Русский интерфейс.",
+      "packages": [
+        {
+          "url": "https://www.niisi.ru/kumir/kumir2-2.1.0-rc11-install.exe",
+          "sha256": "868402a80ace8df37345afc8555676a003705a86bda864d9d547ca0a5644280e",
+          "size": 36521256,
+          "kind": "exe",
+          "installer": "nsis",
+          "args": "/S"
+        }
+      ],
+      "size_mb": 35
+    },
+    {
+      "id": "gcompris",
+      "name": "GCompris (для младших классов)",
+      "category": "study",
+      "description": "Развивающие задания для детей 2-10 лет: счёт, чтение, логика, знакомство с компьютером. Для 1-4 классов.",
+      "site": "https://gcompris.net/index-ru.html",
+      "detect": [
+        "GCompris"
+      ],
+      "russian": "Русский интерфейс и русская озвучка заданий.",
+      "packages": [
+        {
+          "url": "https://download.kde.org/stable/gcompris/qt/windows/gcompris-qt-26.2-win64-gcc.exe",
+          "sha256": "d4427f2081a46e788acc8831292a664d82d08166679cf9f64a3504d6cda8ee9d",
+          "size": 81696061,
+          "kind": "exe",
+          "installer": "nsis",
+          "args": "/S"
+        }
+      ],
+      "size_mb": 78
+    },
+    {
+      "id": "blender",
+      "name": "Blender (3D-моделирование)",
+      "category": "study",
+      "description": "Трёхмерное моделирование, анимация и подготовка моделей для 3D-печати. Версия с долгой поддержкой (LTS).",
+      "site": "https://www.blender.org",
+      "detect": [
+        "Blender"
+      ],
+      "russian": "Язык выбирается автоматически по языку Windows: на русской Windows интерфейс русский.",
+      "packages": [
+        {
+          "url": "https://download.blender.org/release/Blender4.5/blender-4.5.9-windows-x64.msi",
+          "sha256": "65d9fd64fa58d5ec25a2e315cac68ba7d3584d4c8c2757947e993c47f2fa085f",
+          "size": 360325120,
+          "kind": "msi",
+          "installer": "msi",
+          "args": "/qn /norestart ALLUSERS=1"
+        }
+      ],
+      "size_mb": 344
+    },
+    {
+      "id": "freecad",
+      "name": "FreeCAD (черчение и САПР)",
+      "category": "study",
+      "description": "Параметрическое 3D-проектирование и черчение: детали, сборки, чертежи. Для технологии и черчения.",
+      "site": "https://www.freecad.org",
+      "detect": [
+        "FreeCAD"
+      ],
+      "russian": "Русский интерфейс по языку Windows.",
+      "packages": [
+        {
+          "url": "https://github.com/FreeCAD/FreeCAD/releases/download/1.1.4/FreeCAD_1.1.4-Windows-x86_64-py311-installer.exe",
+          "sha256": "845f7101d33faf257a82a0cadc5f4f3804441f46ee493eb32b92fcf9c7147a24",
+          "size": 519314976,
+          "kind": "exe",
+          "installer": "nsis",
+          "args": "/S"
+        }
+      ],
+      "size_mb": 495
+    },
+    {
+      "id": "gimp",
+      "name": "GIMP (редактор изображений)",
+      "category": "media",
+      "description": "Редактор растровой графики: обработка фотографий, рисование, коллажи. Бесплатный аналог Photoshop.",
+      "site": "https://www.gimp.org",
+      "detect": [
+        "GIMP"
+      ],
+      "russian": "Русский интерфейс по языку Windows.",
+      "packages": [
+        {
+          "url": "https://download.gimp.org/gimp/v3.2/windows/gimp-3.2.8-setup.exe",
+          "sha256": "1d78874295661d791eaf149982e9b3564888631ea29186da5ff99e8114020a5b",
+          "size": 185816224,
+          "kind": "exe",
+          "installer": "inno",
+          "args": "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /SP- /ALLUSERS"
+        }
+      ],
+      "size_mb": 177
+    },
+    {
+      "id": "krita",
+      "name": "Krita (цифровая живопись)",
+      "category": "media",
+      "description": "Программа для рисования и иллюстраций на компьютере или планшете, для уроков ИЗО и мультипликации.",
+      "site": "https://krita.org/ru/",
+      "detect": [
+        "Krita"
+      ],
+      "russian": "Русский интерфейс.",
+      "packages": [
+        {
+          "url": "https://download.kde.org/stable/krita/6.0.4/krita-x64-6.0.4-setup.exe",
+          "sha256": "23eac8928d9de04c0dcd73c9f975240f7148b9cc879b20c1f7442d3816aba8b4",
+          "size": 175706528,
+          "kind": "exe",
+          "installer": "nsis",
+          "args": "/S"
+        }
+      ],
+      "size_mb": 168
+    },
+    {
+      "id": "audacity",
+      "name": "Audacity (запись и обработка звука)",
+      "category": "media",
+      "description": "Запись голоса, монтаж и обработка звука: для уроков музыки, подкастов, проектов.",
+      "site": "https://www.audacityteam.org",
+      "detect": [
+        "Audacity"
+      ],
+      "russian": "Русский интерфейс по языку Windows.",
+      "packages": [
+        {
+          "url": "https://github.com/audacity/audacity/releases/download/Audacity-3.7.9/audacity-win-3.7.9-64bit.exe",
+          "sha256": "e3096847ac4270d304e9b112d153642a72b66b42e13f83a32f06eecfb4ce7e48",
+          "size": 19943880,
+          "kind": "exe",
+          "installer": "inno",
+          "args": "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /SP- /ALLUSERS"
+        }
+      ],
+      "size_mb": 19
+    },
+    {
+      "id": "vlc",
+      "name": "VLC (медиапроигрыватель)",
+      "category": "media",
+      "description": "Проигрывает видео и звук любых форматов, без дополнительных кодеков.",
+      "site": "https://www.videolan.org/vlc/index.ru.html",
+      "detect": [
+        "VLC media player"
+      ],
+      "russian": "Русский интерфейс по языку Windows.",
+      "packages": [
+        {
+          "url": "https://get.videolan.org/vlc/3.0.24/win64/vlc-3.0.24-win64.msi",
+          "sha256": "22172095ce4c2d5f5b600bb4c142d78105db29a77fa59a931941876f3b20f6d0",
+          "size": 63389696,
+          "kind": "msi",
+          "installer": "msi",
+          "args": "/qn /norestart ALLUSERS=1"
+        }
+      ],
+      "size_mb": 60
+    },
+    {
+      "id": "7zip",
+      "name": "7-Zip (архиватор)",
+      "category": "system",
+      "description": "Создаёт и распаковывает архивы .zip, .7z, .rar и другие.",
+      "site": "https://www.7-zip.org",
+      "detect": [
+        "7-Zip"
+      ],
+      "russian": "Русский интерфейс по языку Windows.",
+      "packages": [
+        {
+          "url": "https://github.com/ip7z/7zip/releases/download/26.05/7z2605-x64.msi",
+          "sha256": "3fe4ab99fa15629c652944309a2b2bc6e41fc933fc6b63f5df1ebcf3aea68263",
+          "size": 2008576,
+          "kind": "msi",
+          "installer": "msi",
+          "args": "/qn /norestart ALLUSERS=1"
+        }
+      ],
+      "size_mb": 2
+    },
+    {
+      "id": "notepadpp",
+      "name": "Notepad++ (текстовый редактор)",
+      "category": "system",
+      "description": "Удобный редактор текстов и программного кода с подсветкой синтаксиса.",
+      "site": "https://notepad-plus-plus.org",
+      "detect": [
+        "Notepad++"
+      ],
+      "russian": "Русский интерфейс по языку Windows.",
+      "packages": [
+        {
+          "url": "https://github.com/notepad-plus-plus/notepad-plus-plus/releases/download/v8.9.8.1/npp.8.9.8.1.Installer.x64.msi",
+          "sha256": "0c4f4fe82babd7688f5c1431b1357392491563af6ffedf4e37f5de0bd71babb4",
+          "size": 7835648,
+          "kind": "msi",
+          "installer": "msi",
+          "args": "/qn /norestart ALLUSERS=1"
+        }
+      ],
+      "size_mb": 7
+    }
+  ]
+}

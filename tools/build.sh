@@ -21,6 +21,9 @@ echo "== SchoolShield $VERSION =="
 rm -rf "$DIST"
 mkdir -p "$DIST/payload"
 
+echo "-- catalog check"
+python3 tools/check-catalog.py
+
 echo "-- launcher"
 dotnet build src/SchoolShield -c Release -o "$DIST/app" -nologo -v q
 echo "-- payload"

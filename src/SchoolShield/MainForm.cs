@@ -369,9 +369,9 @@ namespace SchoolShield
                 Config fresh = Config.Load();            // also publishes State.GamesAllowed and State.GameExceptions
                 Cfg.AllowGames = fresh.AllowGames;
                 Cfg.GameExceptions = fresh.GameExceptions;
+                ReloadCatalog();                          // also after the administrator installed a program from the catalog
                 if (before == State.GamesAllowed) return;
                 Log.Write("games", State.GamesAllowed ? "Игры разрешены администратором" : "Игры запрещены администратором");
-                ReloadCatalog();
                 Ui.Toast(State.GamesAllowed ? "Администратор разрешил игры." : "Игры снова запрещены.");
             }
             catch { }

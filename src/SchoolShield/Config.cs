@@ -242,7 +242,7 @@ namespace SchoolShield
                 // программирование
                 "idle", "thonny", "lazarus", "pascal", "алгоритм", "visual studio", "vs code", "vscode", "code::blocks", "codeblocks", "dev-c",
                 "devc", "pycharm", "notepad++", "github", "git bash", "gitkraken", "java", "arduino", "intellij", "eclipse", "android studio",
-                "python", "unity", "mblock", "makecode", "micro:bit", "microbit", "kodu",
+                "python", "unity", "mblock", "makecode", "micro:bit", "microbit", "kodu", "pascalabc", "gcompris",
                 // 3D-моделирование и печать
                 "3d", "blender", "tinkercad", "sketchup", "freecad", "компас", "kompas", "autocad", "solidworks", "fusion", "cura",
                 "openscad", "meshmixer", "nanocad",
@@ -256,7 +256,7 @@ namespace SchoolShield
                 "audacity", "kdenlive", "movies", "кино", "camera", "камера", "recorder", "звукозапись", "groove",
                 "photoshop", "mp3", "video", "видео", "музык", "music"));
             r.Add(new CategoryRule("system", "Системные", "\uE770",
-                "calculator", "калькулятор", "notepad", "блокнот", "snip", "ножницы", "sketch", "wordpad",
+                "calculator", "калькулятор", "notepad", "блокнот", "snip", "ножницы", "sketch", "wordpad", "7-zip", "архиватор",
                 "character map", "таблица символов", "magnifier", "лупа", "on-screen keyboard", "экранная клавиатура",
                 "narrator", "clock", "часы", "будильник", "alarm", "sticky", "заметки", "realtek", "audio manager"));
             r.Add(new CategoryRule("microsoft", "Майкрософт", "\uE782",
@@ -369,8 +369,10 @@ namespace SchoolShield
         /// <summary>Time stamp of config.json (the launcher polls it to pick up a changed "Games" switch without a restart).</summary>
         public static DateTime Stamp()
         {
-            try { return File.Exists(ConfigPath) ? File.GetLastWriteTimeUtc(ConfigPath) : DateTime.MinValue; }
-            catch { return DateTime.MinValue; }
+            DateTime a = DateTime.MinValue, b = DateTime.MinValue;
+            try { if (File.Exists(ConfigPath)) a = File.GetLastWriteTimeUtc(ConfigPath); } catch { }
+            try { string apps = System.IO.Path.Combine(DataDir, "apps.stamp"); if (File.Exists(apps)) b = File.GetLastWriteTimeUtc(apps); } catch { }
+            return a > b ? a : b;     // apps.stamp is touched after the administrator installs a program from the catalog
         }
 
         public static bool IsBuiltInHidden(string name)

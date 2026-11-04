@@ -597,7 +597,7 @@ if ($NoShell) {
     }
     Set-Reg $OwnKey 'InstallDir' $InstallDir 'String'
     Set-Reg $OwnKey 'StudentUser' $StudentUser 'String'
-    Set-Reg $OwnKey 'Version' '2.3.0' 'String'
+    Set-Reg $OwnKey 'Version' '2.4.0' 'String'
     Set-Reg $Winlogon 'Shell' ('"' + $exeInstalled + '"') 'String'
     Write-Ok 'Лаунчер зарегистрирован как оболочка. Администраторам он откроет обычный рабочий стол.'
 }
