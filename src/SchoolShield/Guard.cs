@@ -53,7 +53,7 @@ namespace SchoolShield
         private int tick;
 
         public int Strikes;
-        public event Action<string> Alert;
+        public event Action<ViolationKind, string> Alert;
 
         public Guard(Config cfg)
         {
@@ -107,10 +107,10 @@ namespace SchoolShield
             }
         }
 
-        private void Raise(string message)
+        private void Raise(ViolationKind kind, string detail)
         {
-            Action<string> h = Alert;
-            if (h != null) h(message);
+            Action<ViolationKind, string> h = Alert;
+            if (h != null) h(kind, detail);
         }
 
         // ---------------------------------------------------------------- main loop
@@ -141,14 +141,14 @@ namespace SchoolShield
 
                 if (cfg.CloseBadWindows && MatchesBad(w.Handle, w.Title))
                 {
-                    HandleBadWindow(w, cfg.IsTeacher() ? "Материал 18+. Окно закрыто." : "Запрещённый контент. Окно закрыто.");
+                    HandleBadWindow(w, ViolationKind.Adult);
                     continue;
                 }
 
                 // Games: windows of game sites and portals (titles such as "Яндекс Игры", "Poki - Play free online games").
                 if (!State.GamesAllowed && MatchesGame(w.Handle, w.Title))
                 {
-                    HandleBadWindow(w, "Игры сейчас запрещены. Окно закрыто.");
+                    HandleBadWindow(w, ViolationKind.Game);
                     continue;
                 }
 
@@ -240,7 +240,7 @@ namespace SchoolShield
             return isGame;
         }
 
-        private void HandleBadWindow(WinInfo w, string message)
+        private void HandleBadWindow(WinInfo w, ViolationKind kind)
         {
             DateTime first;
             if (!closing.TryGetValue(w.Handle, out first))
@@ -248,7 +248,7 @@ namespace SchoolShield
                 closing[w.Handle] = DateTime.Now;
                 Strikes++;
                 Log.Write("guard", "Запрещённое окно: \"" + w.Title + "\" (pid " + w.Pid + ")" + (State.Preview ? " [preview]" : ""));
-                Raise(message);
+                Raise(kind, ShortTitle(w.Title));
                 if (State.Preview) return;
                 if (w.Iconic) Native.ShowWindow(w.Handle, Native.SW_RESTORE);
                 Native.PostMessage(w.Handle, Native.WM_CLOSE, IntPtr.Zero, IntPtr.Zero);
@@ -259,6 +259,16 @@ namespace SchoolShield
                 closing[w.Handle] = DateTime.Now;
                 KillPid((int)w.Pid, "окно не закрылось: " + w.Title);
             }
+        }
+
+        /// <summary>The window title for the message card: short, and without the browser name after the dash.</summary>
+        private static string ShortTitle(string title)
+        {
+            if (string.IsNullOrEmpty(title)) return "";
+            string t = title.Trim();
+            int dash = t.LastIndexOf(" - ", StringComparison.Ordinal);
+            if (dash > 8) t = t.Substring(0, dash);
+            return t.Length > 60 ? t.Substring(0, 59) + "…" : t;
         }
 
         // ---------------------------------------------------------------- processes
@@ -277,13 +287,13 @@ namespace SchoolShield
 
                     if (cfg.KillBlockedProcesses && blocked.Contains(name))
                     {
-                        KillProcess(p, "запрещённая программа");
+                        KillProcess(p, "запрещённая программа", ViolationKind.Program, name);
                         continue;
                     }
 
                     if (!State.GamesAllowed && gameProcesses.Contains(name))
                     {
-                        KillProcess(p, "игра или игровой лаунчер (игры запрещены)");
+                        KillProcess(p, "игра или игровой лаунчер (игры запрещены)", ViolationKind.Game, name);
                         continue;
                     }
 
@@ -292,7 +302,7 @@ namespace SchoolShield
                         string path = Native.GetProcessPath(p.Id);
                         bool ok = path == null || IsPathAllowed(path);
                         pathOk[p.Id] = ok;
-                        if (!ok) KillProcess(p, "запуск из недопустимого места: " + path);
+                        if (!ok) KillProcess(p, "запуск из недопустимого места: " + path, ViolationKind.Program, Path.GetFileName(path));
                     }
                 }
                 catch { /* process exited or access denied */ }
@@ -324,8 +334,15 @@ namespace SchoolShield
 
         private void KillProcess(Process p, string reason)
         {
+            KillProcess(p, reason, ViolationKind.Generic, null);
+        }
+
+        /// <summary>Ends a process; <paramref name="shown"/> (what the student sees on the card) is null when no card is wanted.</summary>
+        private void KillProcess(Process p, string reason, ViolationKind kind, string shown)
+        {
             string name = p.ProcessName;
             Log.Write("guard", "Завершаю " + name + " (pid " + p.Id + "): " + reason + (State.Preview ? " [preview]" : ""));
+            if (shown != null) Raise(kind, shown);
             if (State.Preview) return;
             try { p.Kill(); }
             catch (Exception ex) { Log.Write("guard", "Не удалось завершить " + name + ": " + ex.Message); }
@@ -414,7 +431,7 @@ namespace SchoolShield
                     }
                     File.Delete(path);
                     Log.Write("guard", "Удалён запрещённый файл: " + path);
-                    Raise("Скачивание программ запрещено. Файл удалён.");
+                    Raise(ViolationKind.Download, Path.GetFileName(path));
                     return;
                 }
                 catch { Thread.Sleep(1000); }   // still being written/locked: retry

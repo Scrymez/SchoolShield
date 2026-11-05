@@ -12,9 +12,11 @@ namespace SchoolShield
         public bool Allowed;
         public string Reason;
         public string Host;
+        public ViolationKind Kind;
 
         public static NavDecision Allow(string host) { NavDecision d = new NavDecision(); d.Allowed = true; d.Host = host; return d; }
-        public static NavDecision Deny(string reason, string host) { NavDecision d = new NavDecision(); d.Allowed = false; d.Reason = reason; d.Host = host; return d; }
+        public static NavDecision Deny(string reason, string host) { return Deny(ViolationKind.Site, reason, host); }
+        public static NavDecision Deny(ViolationKind kind, string reason, string host) { NavDecision d = new NavDecision(); d.Allowed = false; d.Reason = reason; d.Host = host; d.Kind = kind; return d; }
     }
 
     /// <summary>
@@ -221,8 +223,8 @@ namespace SchoolShield
             if (blockIp && IPAddress.TryParse(host.Trim('[', ']'), out ip) && !IPAddress.IsLoopback(ip))
                 return NavDecision.Deny("Открывать сайты по IP-адресу нельзя.", host);
 
-            if (IsBlockedUrl(u)) return NavDecision.Deny("Сайт заблокирован: взрослый контент или обход защиты.", host);
-            if (IsGameUrl(u)) return NavDecision.Deny("Игры сейчас запрещены администратором.", host);
+            if (IsBlockedUrl(u)) return NavDecision.Deny(ViolationKind.Adult, "Сайт заблокирован: взрослый контент или обход защиты.", host);
+            if (IsGameUrl(u)) return NavDecision.Deny(ViolationKind.Game, "Игры сейчас запрещены администратором.", host);
 
             if (mainFrame)
             {
@@ -232,8 +234,8 @@ namespace SchoolShield
                 // "q" to the word.
                 foreach (string piece in UrlPieces(u))
                 {
-                    if (IsBadText(piece)) return NavDecision.Deny("Запрещённый запрос или адрес.", host);
-                    if (IsGameText(piece)) return NavDecision.Deny("Игры сейчас запрещены администратором.", host);
+                    if (IsBadText(piece)) return NavDecision.Deny(ViolationKind.Adult, "Запрещённый запрос или адрес.", host);
+                    if (IsGameText(piece)) return NavDecision.Deny(ViolationKind.Game, "Игры сейчас запрещены администратором.", host);
                 }
             }
             return NavDecision.Allow(host);
@@ -321,15 +323,25 @@ namespace SchoolShield
 
         private static string Css(bool dark)
         {
-            string bg = dark ? "#0b1220" : "#f1f5f9", card = dark ? "#111c33" : "#ffffff", hover = dark ? "#1e3054" : "#e0f2fe",
-                accent = dark ? "#38bdf8" : "#0284c7", text = dark ? "#e2e8f0" : "#0f172a", muted = dark ? "#94a3b8" : "#64748b";
+            string bg = dark ? "#0a0e1c" : "#f3f6fc", card = dark ? "#131a30" : "#ffffff", hover = dark ? "#1d2848" : "#e8f0ff",
+                accent = dark ? "#22d3ee" : "#0891b2", text = dark ? "#e8edf8" : "#0f172a", muted = dark ? "#8c98b2" : "#5f6e87",
+                line = dark ? "#222d4a" : "#d6deec";
+            string on = dark ? "#06101f" : "#fff";
             return "html,body{margin:0;height:100%;background:" + bg + ";color:" + text + ";font:16px 'Segoe UI',system-ui,sans-serif}" +
-                ".w{max-width:980px;margin:0 auto;padding:36px 28px}h1{font-size:34px;margin:0 0 6px}p.m{color:" + muted + ";margin:4px 0 22px}" +
-                "form{display:flex;gap:10px;margin:0 0 28px}input[type=text]{flex:1;font:18px 'Segoe UI';padding:12px 14px;border:1px solid " + muted + "55;background:" + card +
-                ";color:" + text + ";outline:0}input[type=text]:focus{border-color:" + accent + "}button{font:600 16px 'Segoe UI';padding:0 22px;border:0;background:" + accent +
-                ";color:" + (dark ? "#070c18" : "#fff") + ";cursor:pointer}.g{display:flex;flex-wrap:wrap;gap:14px}a.c{display:block;width:200px;padding:20px 16px;background:" + card +
-                ";color:" + text + ";text-decoration:none;border-radius:14px;font-size:16px;line-height:1.3}a.c:hover{background:" + hover + ";box-shadow:inset 0 0 0 2px " + accent + "}" +
-                ".b{display:inline-block;margin-top:14px;padding:10px 20px;background:" + accent + ";color:" + (dark ? "#070c18" : "#fff") + ";text-decoration:none;font-weight:600}.i{font-size:46px;color:" + accent + "}";
+                "body{background:radial-gradient(900px 480px at 15% 0%," + accent + "1f,transparent 70%)," + bg + ";animation:fade .45s ease both}" +
+                "@keyframes fade{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}" +
+                "@keyframes up{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:none}}" +
+                ".w{max-width:980px;margin:0 auto;padding:40px 28px}h1{font-size:36px;margin:0 0 6px;letter-spacing:-.4px}p.m{color:" + muted + ";margin:4px 0 22px}" +
+                "form{display:flex;gap:10px;margin:0 0 28px}input[type=text]{flex:1;font:18px 'Segoe UI';padding:13px 18px;border:1px solid " + line + ";border-radius:99px;background:" + card +
+                ";color:" + text + ";outline:0;transition:border-color .2s,box-shadow .2s}input[type=text]:focus{border-color:" + accent + ";box-shadow:0 0 0 4px " + accent + "33}" +
+                "button{font:700 16px 'Segoe UI';padding:0 26px;border:0;border-radius:99px;background:linear-gradient(90deg," + accent + ",#818cf8);color:" + on +
+                ";cursor:pointer;transition:transform .18s,box-shadow .18s}button:hover{transform:translateY(-2px);box-shadow:0 10px 26px " + accent + "55}button:active{transform:scale(.96)}" +
+                ".g{display:flex;flex-wrap:wrap;gap:14px}a.c{display:block;width:200px;padding:20px 18px;background:" + card +
+                ";color:" + text + ";text-decoration:none;border-radius:18px;font-size:16px;line-height:1.3;box-shadow:inset 0 0 0 1px " + line + ";animation:up .5s both;transition:transform .2s,box-shadow .2s,background .2s}" +
+                "a.c:nth-child(2){animation-delay:.05s}a.c:nth-child(3){animation-delay:.1s}a.c:nth-child(4){animation-delay:.15s}a.c:nth-child(5){animation-delay:.2s}a.c:nth-child(n+6){animation-delay:.25s}" +
+                "a.c:hover{background:" + hover + ";transform:translateY(-5px);box-shadow:inset 0 0 0 2px " + accent + ",0 14px 30px #00000040}a.c:active{transform:scale(.97)}" +
+                ".b{display:inline-block;margin-top:14px;padding:11px 24px;border-radius:99px;background:" + accent + ";color:" + on + ";text-decoration:none;font-weight:700}.i{font-size:46px;color:" + accent + "}" +
+                "@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}";
         }
 
         private static string H(string s)
@@ -372,11 +384,11 @@ namespace SchoolShield
             return sb.ToString();
         }
 
-        public string BlockedPage(string reason, string host, bool dark)
+        /// <summary>The page shown instead of a blocked site (a joke, a picture, motion). <paramref name="attempt"/> counts the session's violations.</summary>
+        public string BlockedPage(ViolationKind kind, string reason, string host, bool dark, int attempt)
         {
-            return "<!doctype html><html lang=\"ru\"><head><meta charset=\"utf-8\"><title>Недоступно</title><style>" + Css(dark) + "</style></head><body><div class=\"w\">" +
-                "<div class=\"i\">&#9888;</div><h1>Эта страница недоступна</h1><p class=\"m\">" + H(reason) + (host.Length > 0 ? "<br>" + H(host) : "") + "</p>" +
-                "<p class=\"m\">Если вы считаете, что это ошибка, скажите учителю.</p><a class=\"b\" href=\"javascript:history.back()\">Назад</a></div></body></html>";
+            Joke joke = Sarcasm.Pick(kind, attempt, Ui.Sarcastic);
+            return BlockPage.Html(kind, joke, reason, host ?? "", dark, Motion.Enabled, attempt);
         }
     }
 }

@@ -326,7 +326,7 @@ namespace SchoolShield
             if (cur == null || IsAllowed(cfg, cur.Ssid)) return;
             Log.Write("wifi", "Отключаю от сети «" + cur.Ssid + "»: её нет в списке разрешённых");
             Disconnect();
-            Ui.Toast("Эта сеть Wi-Fi не разрешена школой.");
+            Ui.Violation(ViolationKind.Wifi, cur.Ssid);
         }
     }
 }

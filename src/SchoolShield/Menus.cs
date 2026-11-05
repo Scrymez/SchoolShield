@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Drawing;
+using System.Drawing.Drawing2D;
 using System.IO;
 using System.Windows.Forms;
 
@@ -27,15 +28,74 @@ namespace SchoolShield
             public override Color SeparatorLight { get { return Theme.Line; } }
         }
 
+        /// <summary>Rounded hover pill, thin border, no system look.</summary>
+        private sealed class MenuRenderer : ToolStripProfessionalRenderer
+        {
+            public MenuRenderer() : base(new MenuColors()) { }
+
+            protected override void OnRenderToolStripBackground(ToolStripRenderEventArgs e)
+            {
+                using (SolidBrush b = new SolidBrush(Theme.Card)) e.Graphics.FillRectangle(b, e.AffectedBounds);
+            }
+
+            protected override void OnRenderToolStripBorder(ToolStripRenderEventArgs e)
+            {
+                Graphics g = e.Graphics;
+                Fx.Quality(g);
+                Fx.StrokeRound(g, Theme.Line, 1.6f, new RectangleF(0.5f, 0.5f, e.ToolStrip.Width - 2, e.ToolStrip.Height - 2), Metrics.S(12));
+            }
+
+            protected override void OnRenderMenuItemBackground(ToolStripItemRenderEventArgs e)
+            {
+                if (!e.Item.Selected || !e.Item.Enabled) return;
+                Graphics g = e.Graphics;
+                Fx.Quality(g);
+                RectangleF r = new RectangleF(Metrics.S(5), 2, e.Item.Width - Metrics.S(10), e.Item.Height - 4);
+                using (SolidBrush b = new SolidBrush(Theme.CardHover)) Fx.FillRound(g, b, r, Metrics.S(9));
+                using (LinearGradientBrush lg = Fx.Gradient(new RectangleF(r.X, r.Y + 6, Metrics.S(3), Math.Max(4, r.Height - 12)), Theme.Accent, Theme.Accent2, 90f))
+                    Fx.FillRound(g, lg, new RectangleF(r.X + 2, r.Y + 6, Metrics.S(3), Math.Max(4, r.Height - 12)), 1.5f);
+            }
+
+            protected override void OnRenderSeparator(ToolStripSeparatorRenderEventArgs e)
+            {
+                using (Pen p = new Pen(Theme.Line))
+                    e.Graphics.DrawLine(p, Metrics.S(12), e.Item.Height / 2, e.Item.Width - Metrics.S(12), e.Item.Height / 2);
+            }
+
+            protected override void OnRenderItemText(ToolStripItemTextRenderEventArgs e)
+            {
+                if (!e.Item.Enabled) e.TextColor = Fx.Alpha(Theme.Muted, 0.6);
+                else if (e.Item.ForeColor == Theme.Danger) e.TextColor = Theme.Danger;
+                else e.TextColor = Theme.Text;
+                base.OnRenderItemText(e);
+            }
+        }
+
         public static ContextMenuStrip Create()
         {
             ContextMenuStrip m = new ContextMenuStrip();
-            m.Renderer = new ToolStripProfessionalRenderer(new MenuColors());
+            m.Renderer = new MenuRenderer();
             m.BackColor = Theme.Card;
             m.ForeColor = Theme.Text;
             m.Font = Theme.UiFont(11);
             m.ShowImageMargin = false;
             m.ShowCheckMargin = false;
+            m.Padding = new Padding(Metrics.S(4));
+            m.Opening += delegate
+            {
+                if (!Motion.Enabled) return;
+                m.Opacity = 0;
+                Tween.Run(150, Easing.OutCubic, delegate (double t) { if (!m.IsDisposed) m.Opacity = t; });
+            };
+            m.Opened += delegate
+            {
+                try
+                {
+                    using (System.Drawing.Drawing2D.GraphicsPath gp = Fx.Round(new RectangleF(0, 0, m.Width, m.Height), Metrics.S(12)))
+                        m.Region = new Region(gp);
+                }
+                catch { }
+            };
             return m;
         }
 

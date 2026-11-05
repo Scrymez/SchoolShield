@@ -18,6 +18,7 @@ namespace SchoolShield
         public ScriptRunDialog(string title)
         {
             Text = title;
+            Fx.FadeIn(this, 180);
             AutoScaleDimensions = new SizeF(96F, 96F);
             AutoScaleMode = AutoScaleMode.Dpi;
             StartPosition = FormStartPosition.CenterParent;
@@ -148,8 +149,8 @@ namespace SchoolShield
     /// </summary>
     internal sealed class SelfDestructDialog : Form
     {
-        private readonly CheckBox purge = new CheckBox();
-        private readonly CheckBox student = new CheckBox();
+        private readonly CheckBox purge = new MotionCheck();
+        private readonly CheckBox student = new MotionCheck();
         private readonly TextBox confirm = new TextBox();
         private readonly Button go;
         private const string Word = "УДАЛИТЬ";
@@ -157,6 +158,7 @@ namespace SchoolShield
         public SelfDestructDialog(Config cfg)
         {
             Text = "Самоликвидация SchoolShield";
+            Fx.FadeIn(this, 200);
             AutoScaleDimensions = new SizeF(96F, 96F);
             AutoScaleMode = AutoScaleMode.Dpi;
             StartPosition = FormStartPosition.CenterParent;
@@ -285,16 +287,16 @@ namespace SchoolShield
         private readonly TextBox student = new TextBox();
         private readonly TextBox adminUser = new TextBox();
         private readonly TextBox adminPass = new TextBox();
-        private readonly CheckBox samePass = new CheckBox();
+        private readonly CheckBox samePass = new MotionCheck();
         private readonly TextBox hotkey = new TextBox();
         private readonly ComboBox dns = new ComboBox();
         private readonly ComboBox web = new ComboBox();
         private readonly ComboBox downloads = new ComboBox();
         private readonly ComboBox usb = new ComboBox();
-        private readonly CheckBox autologon = new CheckBox();
-        private readonly CheckBox aiModel = new CheckBox();
-        private readonly CheckBox keepCode = new CheckBox();
-        private readonly CheckBox noShell = new CheckBox();
+        private readonly CheckBox autologon = new MotionCheck();
+        private readonly CheckBox aiModel = new MotionCheck();
+        private readonly CheckBox keepCode = new MotionCheck();
+        private readonly CheckBox noShell = new MotionCheck();
 
         public ProtectionWizard(Config cfg, bool alreadyConfigured)
         {
@@ -307,6 +309,7 @@ namespace SchoolShield
             MaximizeBox = false;
             MinimizeBox = false;
             ShowInTaskbar = false;
+            Fx.FadeIn(this, 200);
             ClientSize = new Size(640, 760);
             BackColor = Theme.Background;
             ForeColor = Theme.Text;
@@ -322,8 +325,8 @@ namespace SchoolShield
             y += 62;
 
             AddLabel("Код администратора (минимум 8 символов)", y); y += 24;
-            code1.SetBounds(20, y, 290, 28); code1.UseSystemPasswordChar = true; Style(code1); Controls.Add(code1);
-            code2.SetBounds(330, y, 290, 28); code2.UseSystemPasswordChar = true; Style(code2); Controls.Add(code2);
+            code1.SetBounds(20, y, 290, 28); code1.UseSystemPasswordChar = true; Field(code1);
+            code2.SetBounds(330, y, 290, 28); code2.UseSystemPasswordChar = true; Field(code2);
             y += 34;
             keepCode.Text = "Оставить прежний код (при повторной настройке)";
             keepCode.AutoSize = true;
@@ -336,8 +339,8 @@ namespace SchoolShield
             y += keepCode.Visible ? 30 : 4;
 
             AddLabel("Администратор Windows: имя учётной записи", y); AddLabel("Пароль (если не как код)", y, 330); y += 24;
-            adminUser.SetBounds(20, y, 290, 28); adminUser.Text = cfg.Install.AdminUser; Style(adminUser); Controls.Add(adminUser);
-            adminPass.SetBounds(330, y, 290, 28); adminPass.UseSystemPasswordChar = true; Style(adminPass); Controls.Add(adminPass);
+            adminUser.SetBounds(20, y, 290, 28); adminUser.Text = cfg.Install.AdminUser; Field(adminUser);
+            adminPass.SetBounds(330, y, 290, 28); adminPass.UseSystemPasswordChar = true; Field(adminPass);
             y += 34;
             samePass.Text = "Пароль администратора Windows такой же, как код администратора";
             samePass.Checked = true;
@@ -358,13 +361,12 @@ namespace SchoolShield
             hotkey.SetBounds(20, y, 600, 28);
             hotkey.ReadOnly = true;
             hotkey.Text = cfg.AdminHotkey;
-            Style(hotkey);
             hotkey.KeyDown += OnHotkeyDown;
-            Controls.Add(hotkey);
+            Field(hotkey);
             y += 40;
 
             AddLabel("Имя учётной записи ученика", y); y += 24;
-            student.SetBounds(20, y, 290, 28); student.Text = cfg.Install.StudentUser; Style(student); Controls.Add(student);
+            student.SetBounds(20, y, 290, 28); student.Text = cfg.Install.StudentUser; Field(student);
             y += 40;
 
             AddLabel("Фильтр DNS (AdGuardFamily: без рекламы и взрослых сайтов)", y); AddLabel("Интернет", y, 330); y += 24;
@@ -411,11 +413,13 @@ namespace SchoolShield
             CancelButton = cancel;
         }
 
-        private void Style(TextBox t)
+        /// <summary>Puts a text box (its bounds already set) into a rounded frame on the form.</summary>
+        private void Field(TextBox t)
         {
-            t.BackColor = Theme.Card;
-            t.ForeColor = Theme.Text;
-            t.BorderStyle = BorderStyle.FixedSingle;
+            Rectangle b = t.Bounds;
+            FieldHost h = new FieldHost(t, false);
+            h.SetBounds(b.X, b.Y - 4, b.Width, b.Height + 8);
+            Controls.Add(h);
         }
 
         private void AddLabel(string text, int y) { AddLabel(text, y, 20); }
@@ -433,6 +437,9 @@ namespace SchoolShield
         {
             c.SetBounds(x, y, w, 28);
             c.DropDownStyle = ComboBoxStyle.DropDownList;
+            c.FlatStyle = FlatStyle.Flat;
+            c.BackColor = Theme.Card;
+            c.ForeColor = Theme.Text;
             c.Items.AddRange(items);
             c.SelectedItem = selected;
             if (c.SelectedIndex < 0) c.SelectedIndex = 0;
@@ -556,14 +563,17 @@ namespace SchoolShield
         private readonly Panel nav = new Panel();
         private readonly Panel pageHost = new Panel();
         private readonly Dictionary<string, Func<Control>> builders = new Dictionary<string, Func<Control>>();
-        private readonly Dictionary<string, Button> navButtons = new Dictionary<string, Button>();
+        private readonly Dictionary<string, SidebarButton> navButtons = new Dictionary<string, SidebarButton>();
         private readonly List<string> order = new List<string>();
         private string currentId;
 
         public AdminPanelForm(Config cfg)
         {
             this.cfg = cfg;
+            Motion.Configure(cfg.Animations);
+            Ui.Sarcastic = cfg.SarcasticMessages;
             Text = "SchoolShield — панель администратора";
+            Fx.FadeIn(this, 240);
             AutoScaleDimensions = new SizeF(96F, 96F);
             AutoScaleMode = AutoScaleMode.Dpi;
             StartPosition = FormStartPosition.CenterScreen;
@@ -575,7 +585,7 @@ namespace SchoolShield
             try { Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath); } catch { }
 
             nav.Dock = DockStyle.Left;
-            nav.Width = 220;
+            nav.Width = 240;
             nav.BackColor = Theme.Sidebar;
             pageHost.Dock = DockStyle.Fill;
             pageHost.BackColor = Theme.Background;
@@ -610,14 +620,9 @@ namespace SchoolShield
             }
 
             for (int i = order.Count - 1; i >= 0; i--) nav.Controls.Add(navButtons[order[i]]);
-            Label brand = new Label();
-            brand.Text = cfg.IsTeacher() ? "SchoolShield · Учитель" : "SchoolShield";
-            brand.Dock = DockStyle.Top;
-            brand.Height = 70;
-            brand.TextAlign = ContentAlignment.MiddleLeft;
-            brand.Padding = new Padding(20, 0, 0, 0);
-            brand.Font = Theme.UiFont(15, FontStyle.Bold);
-            brand.ForeColor = Theme.Accent;
+            BrandControl brand = new BrandControl();
+            brand.ForceLabels = true;
+            brand.Caption = cfg.IsTeacher() ? "SchoolShield · Учитель" : "SchoolShield";
             nav.Controls.Add(brand);
 
             Show2("status");
@@ -628,42 +633,58 @@ namespace SchoolShield
             };
         }
 
+        private int demoKind;
+
+        private static string NavGlyph(string id)
+        {
+            switch (id)
+            {
+                case "status": return "\uE80F";
+                case "apps": return "\uE71D";
+                case "software": return "\uE896";
+                case "lists": return "\uE71C";
+                case "ai": return "\uE7B3";
+                case "wifi": return "\uE701";
+                case "update": return "\uE895";
+                case "settings": return "\uE713";
+                case "log": return "\uE8A5";
+                default: return "\uE946";
+            }
+        }
+
         private void Add(string id, string title, Func<Control> builder)
         {
             builders[id] = builder;
             order.Add(id);
-            Button b = new Button();
-            b.Text = "   " + title;
-            b.TextAlign = ContentAlignment.MiddleLeft;
-            b.FlatStyle = FlatStyle.Flat;
-            b.FlatAppearance.BorderSize = 0;
-            b.Dock = DockStyle.Top;
-            b.Height = 46;
-            b.Font = Theme.UiFont(11.5f);
-            b.ForeColor = Theme.Text;
-            b.BackColor = Theme.Sidebar;
-            b.Cursor = Cursors.Hand;
-            b.Click += delegate { Show2(id); };
+            SidebarButton b = new SidebarButton(NavGlyph(id), title);
+            b.ForceLabels = true;
+            b.MouseUp += delegate (object o, MouseEventArgs e) { if (e.Button == MouseButtons.Left) Show2(id); };
             navButtons[id] = b;
         }
 
         private void Show2(string id)
         {
+            bool same = currentId == id;
             currentId = id;
-            foreach (KeyValuePair<string, Button> kv in navButtons)
-                kv.Value.BackColor = kv.Key == id ? Theme.Card : Theme.Sidebar;
-            foreach (Control c in new List<Control>(Ctl(pageHost))) { pageHost.Controls.Remove(c); c.Dispose(); }
-            Control page;
-            try { page = builders[id](); }
-            catch (Exception ex)
+            foreach (KeyValuePair<string, SidebarButton> kv in navButtons) kv.Value.Selected = kv.Key == id;
+            Action swap = delegate
             {
-                Label l = new Label();
-                l.Text = "Не удалось открыть страницу: " + ex.Message;
-                l.AutoSize = true;
-                page = l;
-            }
-            page.Dock = DockStyle.Fill;
-            pageHost.Controls.Add(page);
+                foreach (Control c in new List<Control>(Ctl(pageHost))) { pageHost.Controls.Remove(c); c.Dispose(); }
+                Control page;
+                try { page = builders[id](); }
+                catch (Exception ex)
+                {
+                    Label l = new Label();
+                    l.Text = "Не удалось открыть страницу: " + ex.Message;
+                    l.AutoSize = true;
+                    page = l;
+                }
+                page.Dock = DockStyle.Fill;
+                pageHost.Controls.Add(page);
+                Fx.PlayEnter(page);
+            };
+            // a page that was rebuilt in place (after a button) does not fade; moving to another page does
+            if (!same && IsHandleCreated && Visible) Fx.Crossfade(pageHost, swap, 200); else swap();
         }
 
         private static IEnumerable<Control> Ctl(Control c)
@@ -725,12 +746,11 @@ namespace SchoolShield
         private static TextBox Txt(Control parent, int x, int y, int w, string text)
         {
             TextBox t = new TextBox();
-            t.SetBounds(x, y, w, 28);
             t.Text = text ?? "";
-            t.BackColor = Theme.Card;
-            t.ForeColor = Theme.Text;
-            t.BorderStyle = BorderStyle.FixedSingle;
-            parent.Controls.Add(t);
+            t.Font = Theme.UiFont(10.5f);
+            FieldHost h = new FieldHost(t, false);
+            h.SetBounds(x, y - 2, w, 38);
+            parent.Controls.Add(h);
             return t;
         }
 
@@ -740,24 +760,22 @@ namespace SchoolShield
             t.Multiline = true;
             t.ScrollBars = ScrollBars.Vertical;
             t.AcceptsReturn = true;
-            t.SetBounds(x, y, w, h);
             t.Text = (text ?? "").Replace("\r\n", "\n").Replace("\n", Environment.NewLine);
-            t.BackColor = Theme.Card;
-            t.ForeColor = Theme.Text;
-            t.BorderStyle = BorderStyle.None;
             t.Font = new Font("Consolas", 10.5f);
-            parent.Controls.Add(t);
+            FieldHost host = new FieldHost(t, true);
+            host.SetBounds(x, y, w, h);
+            parent.Controls.Add(host);
             return t;
         }
 
         private static CheckBox Chk(Control parent, string text, int x, int y, bool value)
         {
-            CheckBox c = new CheckBox();
+            CheckBox c = new MotionCheck();
             c.Text = text;
             c.Checked = value;
-            c.AutoSize = true;
             c.Location = new Point(x, y);
             c.ForeColor = Theme.Text;
+            c.Font = Theme.UiFont(10.5f);
             parent.Controls.Add(c);
             return c;
         }
@@ -791,15 +809,10 @@ namespace SchoolShield
             int y = 4;
             if (!configured)
             {
-                Label banner = new Label();
-                banner.Text = "  Первый запуск. Защита ещё не включена: нажмите «Включить защиту…», задайте код и параметры.";
-                banner.SetBounds(0, y, 820, 40);
-                banner.TextAlign = ContentAlignment.MiddleLeft;
-                banner.BackColor = Theme.Accent;
-                banner.ForeColor = Theme.Dark ? Color.FromArgb(7, 12, 24) : Color.White;
-                banner.Font = Theme.UiFont(11, FontStyle.Bold);
+                Banner banner = new Banner("Первый запуск. Защита ещё не включена: нажмите «Включить защиту…», задайте код и параметры.");
+                banner.SetBounds(0, y, 840, 48);
                 p.Controls.Add(banner);
-                y += 56;
+                y += 62;
             }
 
             string student = cfg.Install.StudentUser;
@@ -900,10 +913,10 @@ namespace SchoolShield
 
         private static void Row(Panel p, ref int y, string caption, string value, bool ok)
         {
-            Lbl(p, caption, 0, y, 280, true);
-            Label v = Lbl(p, value, 290, y, 600, false);
-            v.ForeColor = ok ? Theme.Text : Color.FromArgb(251, 191, 36);
-            y += 32;
+            StatusRow r = new StatusRow(caption, value, ok);
+            r.SetBounds(0, y, 840, 40);
+            p.Controls.Add(r);
+            y += 46;
         }
 
         private void RemoveProtection()
@@ -1565,7 +1578,20 @@ namespace SchoolShield
             CheckBox bAds = Chk(p, "Блокировать рекламные сети (кроме YouTube, RuTube и VK Видео)", 0, y, cfg.Browser.BlockAdNetworks); y += 28;
             CheckBox bDl = Chk(p, "Разрешить скачивание файлов во встроенном браузере", 0, y, cfg.Browser.AllowDownloads); y += 28;
             CheckBox ownDlg = Chk(p, "Свои окна «Открыть» и «Сохранить как» вместо стандартных (только нужные папки и учебные файлы)", 0, y, cfg.OwnFileDialogs); y += 28;
-            CheckBox gesture = Chk(p, "Терминал админа открывается и по 7 быстрым нажатиям на часы", 0, y, cfg.AdminClickGesture); y += 40;
+            CheckBox gesture = Chk(p, "Терминал админа открывается и по 7 быстрым нажатиям на часы", 0, y, cfg.AdminClickGesture); y += 28;
+            CheckBox anim = Chk(p, "Плавные анимации (сами отключаются, если в Windows выключены эффекты, и в удалённом сеансе)", 0, y, cfg.Animations); y += 28;
+            CheckBox joke = Chk(p, "Шутливые сообщения, когда ученик делает запрещённое (выключите, чтобы показывались обычные фразы)", 0, y, cfg.SarcasticMessages); y += 28;
+            CheckBox intro = Chk(p, "Заставка при запуске лаунчера", 0, y, cfg.Intro); y += 38;
+            Btn(p, "Показать пример сообщения", 0, y, 300, false, delegate
+            {
+                ViolationKind[] kinds = (ViolationKind[])Enum.GetValues(typeof(ViolationKind));
+                ViolationKind k = kinds[demoKind++ % kinds.Length];
+                string[] details = new string[] { "", "example.com", "setup.exe", "Яндекс Игры", "18+", "program.exe", "script.bat", "C:\\Windows", "Чужая_сеть" };
+                Motion.Configure(anim.Checked);
+                Ui.Attempts++;
+                ViolationForm.Show(k, details[(int)k % details.Length], Sarcasm.Pick(k, Ui.Attempts, joke.Checked), Ui.Attempts);
+            });
+            y += 56;
 
             Lbl(p, "Игры", 0, y, 300, true); y += 26;
             CheckBox games = Chk(p, "Разрешить игры: мини-игры на сайтах, игровые лаунчеры и программы (то же, что тумблер на вкладке «Состояние»)", 0, y, cfg.AllowGames); y += 28;
@@ -1632,6 +1658,11 @@ namespace SchoolShield
                 cfg.Browser.AllowDownloads = bDl.Checked;
                 cfg.OwnFileDialogs = ownDlg.Checked;
                 cfg.AdminClickGesture = gesture.Checked;
+                cfg.Animations = anim.Checked;
+                cfg.SarcasticMessages = joke.Checked;
+                cfg.Intro = intro.Checked;
+                Motion.Configure(cfg.Animations);
+                Ui.Sarcastic = cfg.SarcasticMessages;
                 cfg.UsbMode = ((UsbModeItem)usbBox.SelectedItem).Value;
                 List<string> rejected = new List<string>();
                 cfg.AllowedExtensions = new List<string>();
@@ -1733,7 +1764,7 @@ namespace SchoolShield
             Panel p = new Panel();
             TextBox box = Memo(p, 0, 0, 840, 560, Log.Tail(400));
             box.ReadOnly = true;
-            box.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right | AnchorStyles.Bottom;
+            box.Parent.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right | AnchorStyles.Bottom;   // the frame around the box grows with the window
             Button b1 = Btn(p, "Обновить", 0, 576, 180, true, delegate { box.Text = Log.Tail(400).Replace("\r\n", "\n").Replace("\n", Environment.NewLine); box.SelectionStart = box.TextLength; box.ScrollToCaret(); });
             b1.Anchor = AnchorStyles.Bottom | AnchorStyles.Left;
             Button b2 = Btn(p, "Открыть папку журналов", 196, 576, 280, false, delegate

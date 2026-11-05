@@ -114,6 +114,37 @@ function Read-DomainList([string]$File) {
     return $list
 }
 
+# True when the local account exists, is enabled and is a member of Administrators (by SID, so the group name does not matter).
+# The group is never enumerated: Get-LocalGroupMember fails in Windows PowerShell 5.1 when the group holds an orphaned SID or an
+# online (Microsoft / Azure AD) account, and then looks as if the group were empty.
+function Test-LocalAdminMember([string]$User) {
+    try {
+        $lu = Get-LocalUser -Name $User -ErrorAction Stop
+        if (-not $lu.Enabled) { return $false }
+    } catch { return $false }
+
+    # 1) the account API asks "is this user in that group", no enumeration
+    try {
+        Add-Type -AssemblyName System.DirectoryServices.AccountManagement -ErrorAction Stop
+        $ctx = New-Object System.DirectoryServices.AccountManagement.PrincipalContext([System.DirectoryServices.AccountManagement.ContextType]::Machine)
+        try {
+            $u = [System.DirectoryServices.AccountManagement.UserPrincipal]::FindByIdentity($ctx, $User)
+            $g = [System.DirectoryServices.AccountManagement.GroupPrincipal]::FindByIdentity($ctx, [System.DirectoryServices.AccountManagement.IdentityType]::Sid, 'S-1-5-32-544')
+            if ($u -and $g -and $u.IsMemberOf($g)) { return $true }
+        } finally { $ctx.Dispose() }
+    } catch { }
+
+    # 2) the old net.exe listing (works whatever the language, the group is found by its SID)
+    try {
+        $groupName = (Get-LocalGroup -SID 'S-1-5-32-544' -ErrorAction Stop).Name
+        foreach ($line in @(& net.exe localgroup $groupName 2>$null)) {
+            $t = ([string]$line).Trim()
+            if ($t -ieq $User -or $t -like "*\$User") { return $true }
+        }
+    } catch { }
+    return $false
+}
+
 # ---------------------------------------------------------------- 0. preconditions
 
 Write-Host ''
@@ -270,19 +301,27 @@ if ($script:DryRun) {
             } else { Write-Ok "Учётная запись администратора $AdminUser уже есть, пароль не менялся." }
         }
         $adminGroupName = (Get-LocalGroup -SID 'S-1-5-32-544').Name
-        if (-not (Get-LocalGroupMember -Group $adminGroupName -ErrorAction SilentlyContinue | Where-Object { $_.Name -like "*\$AdminUser" })) {
-            Add-LocalGroupMember -Group $adminGroupName -Member $AdminUser
+        if (-not (Test-LocalAdminMember $AdminUser)) {
+            try { Add-LocalGroupMember -Group $adminGroupName -Member $AdminUser -ErrorAction Stop }
+            catch {
+                # "already a member" is fine; anything else: try the old tool before giving up
+                if ($_.FullyQualifiedErrorId -notlike '*MemberExists*') {
+                    & net.exe localgroup $adminGroupName $AdminUser /add 2>&1 | Out-Null
+                }
+            }
         }
     } catch {
         throw ("Не удалось создать или включить администратора $AdminUser, установка остановлена, чтобы не заблокировать компьютер: " + $_.Exception.Message +
                ' (возможно, пароль не подходит под политику паролей Windows).')
     }
-    # Safeguard: besides the student there must be an enabled local administrator, otherwise nobody could ever turn the protection off.
-    $goodAdmin = @(Get-LocalGroupMember -SID 'S-1-5-32-544' -ErrorAction SilentlyContinue | Where-Object {
-        $_.ObjectClass -eq 'User' -and $_.PrincipalSource -eq 'Local' -and $_.Name -notlike "*\$StudentUser" -and
-        (Get-LocalUser -Name ($_.Name.Split('\')[-1]) -ErrorAction SilentlyContinue).Enabled })
-    if ($goodAdmin.Count -eq 0) { throw 'Нет ни одной включённой учётной записи администратора, кроме ученика. Установка остановлена, чтобы не заблокировать компьютер.' }
-    Write-Host ('  Администраторы Windows: ' + (($goodAdmin | ForEach-Object { $_.Name }) -join ', ')) -ForegroundColor Green
+    # Safeguard: the administrator we just made must really work (enabled, in the Administrators group), otherwise nobody could ever
+    # turn the protection off. Checked on this account, not by listing the whole group.
+    if (-not (Test-LocalAdminMember $AdminUser)) {
+        Write-Warn2 ('Учётная запись ' + $AdminUser + ' не стала администратором. Группа администраторов по данным Windows:')
+        try { (& net.exe localgroup (Get-LocalGroup -SID 'S-1-5-32-544').Name 2>&1) | ForEach-Object { Write-Host ('    ' + $_) } } catch { }
+        throw ('Администратор ' + $AdminUser + ' не создан или не включён. Установка остановлена, чтобы не заблокировать компьютер.')
+    }
+    Write-Ok ('Администратор Windows: ' + $AdminUser + ' (включена, входит в группу администраторов).')
 
     # 2) The student: an ordinary user without a password.
     $usersGroup = Get-LocalGroup -SID 'S-1-5-32-545'
@@ -296,13 +335,14 @@ if ($script:DryRun) {
     }
     # Password changes are forbidden for the student (also blocked in the Ctrl+Alt+Del screen by the launcher).
     try { Set-LocalUser -Name $StudentUser -UserMayChangePassword $false -PasswordNeverExpires $true } catch { Write-Warn2 ('Запрет смены пароля: ' + $_.Exception.Message) }
-    # The student must never be an administrator.
+    # The student must never be an administrator (the check does not enumerate the group, see Test-LocalAdminMember).
     try {
-        $adminGroup = Get-LocalGroup -SID 'S-1-5-32-544'
-        $isAdmin = Get-LocalGroupMember -Group $adminGroup.Name -ErrorAction Stop | Where-Object { $_.Name -like "*\$StudentUser" }
-        if ($isAdmin) {
-            Remove-LocalGroupMember -Group $adminGroup.Name -Member $StudentUser
-            Write-Warn2 "$StudentUser был администратором - права сняты."
+        if (Test-LocalAdminMember $StudentUser) {
+            $adminGroupName2 = (Get-LocalGroup -SID 'S-1-5-32-544').Name
+            try { Remove-LocalGroupMember -Group $adminGroupName2 -Member $StudentUser -ErrorAction Stop }
+            catch { & net.exe localgroup $adminGroupName2 $StudentUser /delete 2>&1 | Out-Null }
+            if (Test-LocalAdminMember $StudentUser) { Write-Warn2 ("$StudentUser остался администратором: снимите права вручную (Параметры - Учётные записи)") }
+            else { Write-Warn2 "$StudentUser был администратором - права сняты." }
         }
     } catch { Write-Warn2 ('Проверка прав ученика: ' + $_.Exception.Message) }
 
@@ -637,7 +677,7 @@ if ($NoShell) {
     }
     Set-Reg $OwnKey 'InstallDir' $InstallDir 'String'
     Set-Reg $OwnKey 'StudentUser' $StudentUser 'String'
-    Set-Reg $OwnKey 'Version' '2.6.2' 'String'
+    Set-Reg $OwnKey 'Version' '2.7.0' 'String'
     Set-Reg $Winlogon 'Shell' ('"' + $exeInstalled + '"') 'String'
     Write-Ok 'Лаунчер зарегистрирован как оболочка. Администраторам он откроет обычный рабочий стол.'
 }

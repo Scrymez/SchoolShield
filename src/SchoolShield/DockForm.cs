@@ -91,14 +91,14 @@ namespace SchoolShield
         public static int BarHeight { get { return Metrics.DockHeight; } }
 
         private readonly MainForm main;
-        private readonly Button home = new Button();
+        private readonly MotionButton home = new MotionButton(BtnKind.Primary, "", null);
         private readonly FlowLayoutPanel tasks = new FlowLayoutPanel();
         private readonly FlowLayoutPanel right = new FlowLayoutPanel();
         private readonly Label admin = new Label();
-        private readonly Button lang = new Button();
-        private readonly Button volume = new Button();
+        private readonly MotionButton lang = new MotionButton(BtnKind.Secondary, "", null);
+        private readonly MotionButton volume = new MotionButton(BtnKind.Secondary, "", null);
         private readonly Label battery = new Label();
-        private readonly Button wifi = new Button();
+        private readonly MotionButton wifi = new MotionButton(BtnKind.Secondary, "", null);
         private readonly Label clock = new Label();
         private readonly ToolTip tip = new ToolTip();
         private readonly System.Windows.Forms.Timer timer = new System.Windows.Forms.Timer();
@@ -116,10 +116,11 @@ namespace SchoolShield
 
             Rectangle s = Screen.PrimaryScreen.Bounds;
             Bounds = new Rectangle(s.X, s.Y, s.Width, BarHeight);
+            Padding = new Padding(0, 0, 0, Metrics.S(2));
 
             home.Text = "   " + (Metrics.Tiny ? "" : "Меню");
-            home.FlatStyle = FlatStyle.Flat;
-            home.FlatAppearance.BorderSize = 0;
+            home.AutoSize = false;
+            home.Margin = new Padding(0);
             home.Dock = DockStyle.Left;
             home.Width = Metrics.Tiny ? Metrics.S(56) : Metrics.S(118);
             home.Click += delegate { main.ShowMenu(); };
@@ -198,8 +199,7 @@ namespace SchoolShield
         private void Style(Button b, string text, int w, int h)
         {
             b.Text = text;
-            b.FlatStyle = FlatStyle.Flat;
-            b.FlatAppearance.BorderSize = 0;
+            b.AutoSize = false;
             b.Size = new Size(w, h);
             b.Margin = new Padding(0, Metrics.S(5), Metrics.S(6), Metrics.S(5));
             b.Cursor = Cursors.Hand;
@@ -210,14 +210,8 @@ namespace SchoolShield
             BackColor = Theme.Sidebar;
             tasks.BackColor = Theme.Sidebar;
             right.BackColor = Theme.Sidebar;
-            home.BackColor = Theme.Accent;
-            home.ForeColor = Theme.Dark ? Color.FromArgb(7, 12, 24) : Color.White;
             home.Font = Theme.UiFont(10.5f, FontStyle.Bold);
-            foreach (Button b in new Button[] { lang, volume, wifi })
-            {
-                b.BackColor = Theme.Card;
-                b.ForeColor = Theme.Text;
-            }
+            home.Invalidate();
             lang.Font = Theme.UiFont(9.5f, FontStyle.Bold);
             foreach (Label l in new Label[] { battery, clock })
             {
@@ -237,6 +231,14 @@ namespace SchoolShield
                 cp.ExStyle |= Native.WS_EX_TOOLWINDOW | Native.WS_EX_NOACTIVATE;
                 return cp;
             }
+        }
+
+        protected override void OnPaint(PaintEventArgs e)
+        {
+            base.OnPaint(e);
+            int h = Metrics.S(2);
+            using (System.Drawing.Drawing2D.LinearGradientBrush b = Fx.Gradient(new RectangleF(0, Height - h, Width, h), Theme.Accent, Theme.Accent2, 0f))
+                e.Graphics.FillRectangle(b, 0, Height - h, Width, h);
         }
 
         private void Tick()
@@ -277,7 +279,7 @@ namespace SchoolShield
             bool online = NetworkInterface.GetIsNetworkAvailable();
             WifiNetwork cur = Wifi.Available ? Wifi.Current() : null;
             wifi.Text = cur != null ? "" : (online ? "" : "");   // wifi / wired / no network
-            wifi.ForeColor = online ? Color.FromArgb(74, 222, 128) : Theme.Muted;
+            wifi.ForeColor = online ? Theme.Success : Theme.Muted;
             tip.SetToolTip(wifi, cur != null ? "Wi-Fi: " + cur.Ssid : (online ? "Сеть подключена" : "Нет сети. Нажмите, чтобы подключиться"));
         }
 
@@ -303,15 +305,10 @@ namespace SchoolShield
             foreach (WinInfo w in wins)
             {
                 IntPtr handle = w.Handle;
-                Button b = new Button();
-                b.Text = w.Title;
-                b.AutoEllipsis = true;
-                b.TextAlign = ContentAlignment.MiddleLeft;
-                b.FlatStyle = FlatStyle.Flat;
-                b.FlatAppearance.BorderSize = 0;
-                b.BackColor = handle == fg ? Theme.CardHover : Theme.Card;
-                b.ForeColor = Theme.Text;
-                b.Font = Theme.UiFont(9.5f);
+                MotionButton b = new MotionButton(handle == fg ? BtnKind.Primary : BtnKind.Secondary, w.Title, null);
+                b.AutoSize = false;
+                b.HAlign = StringAlignment.Near;
+                b.Font = Theme.UiFont(9.5f, handle == fg ? FontStyle.Bold : FontStyle.Regular);
                 b.Size = new Size(width, BarHeight - Metrics.S(10));
                 b.Margin = new Padding(Metrics.S(6), Metrics.S(5), 0, Metrics.S(5));
                 b.Click += delegate { Activate(handle); };

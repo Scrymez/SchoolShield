@@ -184,6 +184,12 @@ namespace SchoolShield
         // The launcher's own "Open" and "Save as" windows replace the standard ones of other programs for a student (see FileDialogProxy).
         public bool OwnFileDialogs = true;
 
+        // Look and feel: motion in the launcher and the panel (also off when Windows has animations off or in a remote session),
+        // jokes in the messages for a forbidden action (off = plain sentences), the animated start screen.
+        public bool Animations = true;
+        public bool SarcasticMessages = true;
+        public bool Intro = true;
+
         public AiSettings Ai = new AiSettings();
         public BrowserSettings Browser = new BrowserSettings();
         public WifiSettings Wifi = new WifiSettings();

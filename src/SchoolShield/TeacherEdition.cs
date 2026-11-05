@@ -105,7 +105,10 @@ namespace SchoolShield
                 tray.Visible = true;
 
                 guard = new Guard(cfg);
-                guard.Alert += Notify;
+                guard.Alert += delegate (ViolationKind k, string detail)
+                {
+                    Notify(k == ViolationKind.Adult ? "Материал 18+. Окно закрыто." : Sarcasm.PlainFor(k).Title + " " + Sarcasm.PlainFor(k).Line);
+                };
                 guard.Start();
 
                 ai = new AiGuard(cfg);

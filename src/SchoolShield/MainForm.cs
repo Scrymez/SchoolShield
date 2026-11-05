@@ -26,8 +26,8 @@ namespace SchoolShield
         private readonly System.Windows.Forms.Timer clockTimer = new System.Windows.Forms.Timer();
         private readonly System.Windows.Forms.Timer hotTimer = new System.Windows.Forms.Timer();
 
-        private Panel sidebar, content, host, header;
-        private Label titleLabel, bellLabel, clockLabel;
+        private Panel sidebar, content, host;
+        private HeaderBar header;
         private SearchBox search;
         private readonly System.Windows.Forms.Timer wifiTimer = new System.Windows.Forms.Timer();
         private readonly System.Windows.Forms.Timer configTimer = new System.Windows.Forms.Timer();
@@ -55,6 +55,8 @@ namespace SchoolShield
         {
             Cfg = cfg;
             Metrics.Init();
+            Motion.Configure(cfg.Animations);
+            Ui.Sarcastic = cfg.SarcasticMessages;
             User = UserData.Load();
             Theme.Apply(User.Theme != "light");
 
@@ -127,49 +129,14 @@ namespace SchoolShield
             host.Dock = DockStyle.Fill;
             host.BackColor = Theme.Background;
 
-            header = new Panel();
-            header.Dock = DockStyle.Top;
-            header.Height = Metrics.HeaderHeight;
-            header.BackColor = Theme.Header;
-
-            titleLabel = new Label();
-            titleLabel.Font = Theme.UiFont(Metrics.TitlePt, FontStyle.Bold);
-            titleLabel.ForeColor = Theme.Text;
-            titleLabel.AutoSize = false;
-            titleLabel.AutoEllipsis = true;
-            titleLabel.BackColor = Theme.Header;
-
-            bellLabel = new Label();
-            bellLabel.Font = Theme.UiFont(Metrics.Compact ? 10 : 11);
-            bellLabel.ForeColor = Theme.Muted;
-            bellLabel.AutoSize = false;
-            bellLabel.AutoEllipsis = true;
-            bellLabel.BackColor = Theme.Header;
-
-            clockLabel = new Label();
-            clockLabel.Font = Theme.UiFont(Metrics.Compact ? 18 : 22, FontStyle.Bold);
-            clockLabel.ForeColor = Theme.Accent;
-            clockLabel.AutoSize = true;
-            clockLabel.BackColor = Theme.Header;
-            clockLabel.MouseUp += delegate { OnClockClick(); };
-
             search = new SearchBox("Поиск программ и файлов…");
             search.QueryChanged += delegate { OnSearchChanged(); };
 
-            header.Controls.Add(titleLabel);
-            header.Controls.Add(bellLabel);
-            header.Controls.Add(clockLabel);
-            header.Controls.Add(search);
-            header.Resize += delegate { PlaceHeader(); };
-
-            // thin divider under the header
-            Panel line = new Panel();
-            line.Dock = DockStyle.Top;
-            line.Height = 1;
-            line.BackColor = Theme.Line;
+            header = new HeaderBar(search);
+            header.BackColor = Theme.Header;
+            header.ClockClicked += delegate { OnClockClick(); };
 
             content.Controls.Add(host);
-            content.Controls.Add(line);
             content.Controls.Add(header);
 
             sidebar = new Panel();
@@ -188,15 +155,8 @@ namespace SchoolShield
                 buttons[id] = b;
                 sidebar.Controls.Add(b);
             }
-            Label brand = new Label();
-            brand.Text = Metrics.Tiny ? "" : Cfg.Title;
-            brand.Dock = DockStyle.Top;
-            brand.Height = Metrics.Tiny ? Metrics.S(20) : Metrics.S(72);
-            brand.TextAlign = ContentAlignment.MiddleLeft;
-            brand.Padding = new Padding(Metrics.S(22), Metrics.S(8), Metrics.S(8), 0);
-            brand.Font = Theme.UiFont(Metrics.Compact ? 11.5f : 13, FontStyle.Bold);
-            brand.ForeColor = Theme.Text;
-            brand.BackColor = Theme.Sidebar;
+            BrandControl brand = new BrandControl();
+            brand.Caption = Cfg.Title;
             sidebar.Controls.Add(brand);
 
             Controls.Add(content);
@@ -223,46 +183,34 @@ namespace SchoolShield
         private void PlaceHeader()
         {
             if (header == null || header.Width <= 0) return;
-            int pad = Metrics.PagePad;
-            clockLabel.Location = new Point(header.Width - clockLabel.Width - pad, Metrics.S(8));
-
-            int searchW = Math.Max(Metrics.S(170), Math.Min(Metrics.S(340), (int)(header.Width * 0.32)));
-            if (Metrics.Tiny)
-            {
-                // narrow screens: title row, then search and the lesson line below
-                search.SetBounds(pad, Metrics.S(58), header.Width - 2 * pad, Metrics.S(38));
-                titleLabel.SetBounds(pad, Metrics.S(8), Math.Max(100, clockLabel.Left - pad - Metrics.S(8)), Metrics.S(40));
-                bellLabel.SetBounds(pad, Metrics.S(34), Math.Max(100, clockLabel.Left - pad - Metrics.S(8)), Metrics.S(22));
-                bellLabel.Visible = false;
-            }
-            else
-            {
-                search.SetBounds(header.Width - searchW - pad, Metrics.S(50), searchW, Metrics.S(38));
-                titleLabel.SetBounds(pad, Metrics.S(8), Math.Max(100, clockLabel.Left - pad - Metrics.S(12)), Metrics.S(46));
-                bellLabel.Visible = true;
-                bellLabel.SetBounds(pad + 2, Metrics.S(54), Math.Max(100, search.Left - pad - Metrics.S(12)), Metrics.S(26));
-            }
+            header.Place();
         }
 
         public void ShowSection(string id)
         {
             Section s;
             if (!sections.TryGetValue(id, out s)) return;
-            host.Controls.Clear();
-            host.Controls.Add(s);
-            current = s;
-            foreach (KeyValuePair<string, SidebarButton> kv in buttons)
+            if (current == s) { s.OnShown(); return; }
+            bool animate = current != null && IsHandleCreated && Visible && !(s is WebSection) && !(current is WebSection);
+            Action swap = delegate
             {
-                kv.Value.Selected = kv.Key == id;
-                kv.Value.Invalidate();
-            }
-            titleLabel.Text = s.Title;
-            suppressSearch = true;
-            search.ClearQuiet();
-            suppressSearch = false;
-            UpdateHeader();
-            s.OnShown();
+                host.Controls.Clear();
+                host.Controls.Add(s);
+                current = s;
+                foreach (KeyValuePair<string, SidebarButton> kv in buttons) kv.Value.Selected = kv.Key == id;
+                header.Title = s.Title;
+                suppressSearch = true;
+                search.ClearQuiet();
+                suppressSearch = false;
+                UpdateHeader();
+                s.OnShown();
+                PlayEnter(s);
+            };
+            if (animate) Fx.Crossfade(host, swap, 240); else swap();
         }
+
+        /// <summary>The tiles of the new page pop in one after another.</summary>
+        private static void PlayEnter(Control page) { Fx.PlayEnter(page); }
 
         private void OnSearchChanged()
         {
@@ -281,10 +229,9 @@ namespace SchoolShield
 
         private void UpdateHeader()
         {
-            clockLabel.Text = DateTime.Now.ToString("HH:mm");
+            header.ClockText = DateTime.Now.ToString("HH:mm");
             string bell = Bells.Status(Cfg, DateTime.Now);
-            bellLabel.Text = bell ?? Cfg.Subtitle;
-            PlaceHeader();
+            header.Subtitle = bell ?? Cfg.Subtitle;
         }
 
         public void ToggleTheme()
@@ -337,11 +284,11 @@ namespace SchoolShield
             hotTimer.Start();
 
             guard = new Guard(Cfg);
-            guard.Alert += delegate (string m) { Ui.Toast(m); };
+            guard.Alert += delegate (ViolationKind k, string detail) { Ui.Violation(k, detail); };
             guard.Start();
 
             ai = new AiGuard(Cfg);
-            ai.Alert += delegate (string m) { Ui.Toast(m); };
+            ai.Alert += delegate (string m) { Ui.Violation(ViolationKind.Adult, ""); };
             ai.OwnWindowHit += delegate { try { BeginInvoke(new Action(delegate { BlankBrowser(); ShowSection("home"); })); } catch { } };
             ai.Start();
 
@@ -364,6 +311,7 @@ namespace SchoolShield
 
             ReloadCatalog();
             Activate();
+            if (Cfg.Intro && !State.Windowed) IntroForm.Play(Cfg.Title, Cfg.Subtitle);
         }
 
         /// <summary>A toast when a flash drive is plugged in or taken out (the "Flash drives" section also refreshes itself).</summary>
@@ -410,6 +358,10 @@ namespace SchoolShield
                 Cfg.GameExceptions = fresh.GameExceptions;
                 Cfg.UsbMode = fresh.UsbMode;
                 Cfg.OwnFileDialogs = fresh.OwnFileDialogs;
+                Cfg.Animations = fresh.Animations;
+                Cfg.SarcasticMessages = fresh.SarcasticMessages;
+                Motion.Configure(Cfg.Animations);
+                Ui.Sarcastic = Cfg.SarcasticMessages;
                 Cfg.AllowedExtensions = fresh.AllowedExtensions;
                 if (!State.Soft) UserPolicy.ApplyUsb(Cfg);        // the flash-drive mode takes effect at once
                 ReloadCatalog();                          // also after the administrator installed a program from the catalog
@@ -683,17 +635,17 @@ namespace SchoolShield
                 string ext = Path.GetExtension(path);
                 if (Cfg.ForbiddenExtensions.Exists(delegate (string x) { return string.Equals(x, ext, StringComparison.OrdinalIgnoreCase); }))
                 {
-                    Ui.Toast("Файлы этого типа запрещены.");
+                    Ui.Violation(ViolationKind.File, Path.GetFileName(path));
                     return;
                 }
                 if (!State.Privileged && FileRoots.RootOf(FileRoots.ResolveAll(Cfg), path) == null)
                 {
-                    Ui.Toast("Этот файл вне разрешённых папок.");
+                    Ui.Violation(ViolationKind.Folder, Path.GetFileName(path));
                     return;
                 }
                 if (!FileFilter.Allowed(path, Cfg) && !State.Privileged)
                 {
-                    Ui.Toast("Файлы этого типа открыть нельзя.");
+                    Ui.Violation(ViolationKind.File, Path.GetFileName(path));
                     return;
                 }
                 if (FileKinds.Of(path) == FileKind.Image && Cfg.Ai.Enabled)
@@ -701,7 +653,7 @@ namespace SchoolShield
                     NsfwEngine engine = NsfwEngine.TryGet();
                     if (engine != null && IsPictureBlocked(path, engine, null))
                     {
-                        Ui.Toast("Изображение скрыто фильтром.");
+                        Ui.Violation(ViolationKind.Adult, Path.GetFileName(path));
                         return;
                     }
                 }

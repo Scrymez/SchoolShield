@@ -58,15 +58,26 @@ namespace SchoolShield
 
         public override string Id { get { return "home"; } }
         public override string Title { get { return "Главная"; } }
-        public override string Glyph { get { return ""; } }
+        public override string Glyph { get { return "\uE80F"; } }
 
         public override void OnShown() { Rebuild(); }
         public override void OnAppsChanged() { Rebuild(); }
 
+        private int RowWidth { get { return Math.Max(300, root.ClientSize.Width - Metrics.U(34)); } }
+
         private void FitWidths()
         {
-            int w = Math.Max(300, root.ClientSize.Width - 30);
-            foreach (Control c in root.Controls) c.MaximumSize = new Size(w, 0);
+            int w = RowWidth;
+            root.SuspendLayout();
+            foreach (Control c in root.Controls)
+            {
+                c.MaximumSize = new Size(w, 0);
+                HeroCard hero = c as HeroCard;
+                if (hero != null) hero.Width = w;
+                TileGrid grid = c as TileGrid;
+                if (grid != null) grid.Relayout(w);
+            }
+            root.ResumeLayout();
         }
 
         private void Rebuild()
@@ -74,35 +85,26 @@ namespace SchoolShield
             root.SuspendLayout();
             foreach (Control c in new List<Control>(Controls2(root))) { root.Controls.Remove(c); c.Dispose(); }
 
-            int h = DateTime.Now.Hour;
-            string hello = h < 6 ? "Доброй ночи!" : h < 12 ? "Доброе утро!" : h < 18 ? "Добрый день!" : "Добрый вечер!";
-            Label g = new Label();
-            g.Text = hello;
-            g.Font = Theme.UiFont(26, FontStyle.Bold);
-            g.ForeColor = Theme.Text;
-            g.AutoSize = true;
-            g.Margin = new Padding(0, 4, 0, 0);
-            root.Controls.Add(g);
-
+            root.Controls.Add(new HeroCard());
 
             root.Controls.Add(UiKit.Heading("Быстрый доступ"));
-            FlowLayoutPanel quick = UiKit.Flow();
-            AddQuick(quick, "apps", "Программы", "");
-            AddQuick(quick, "docs", "Документы", "");
-            AddQuick(quick, "media", "Фото, видео, музыка", "");
-            AddQuick(quick, "files", "Мои файлы", "");
+            TileGrid quick = NewGrid();
+            AddQuick(quick, "apps", "Программы", "\uE71D");
+            AddQuick(quick, "docs", "Документы", "\uE8A5");
+            AddQuick(quick, "media", "Фото, видео, музыка", "\uE714");
+            AddQuick(quick, "files", "Мои файлы", "\uE8B7");
             AddQuick(quick, "usb", "Флешки", "\uE88E");
-            AddQuick(quick, "web", "Интернет", "");
+            AddQuick(quick, "web", "Интернет", "\uE774");
             root.Controls.Add(quick);
 
             root.Controls.Add(UiKit.Heading("Избранное"));
-            FlowLayoutPanel fav = UiKit.Flow();
+            TileGrid fav = NewGrid();
             foreach (string name in Main.User.Favorites)
             {
                 AppEntry e = Main.FindApp(name);
                 if (e != null) fav.Controls.Add(Main.MakeAppTile(e));
             }
-            if (fav.Controls.Count == 0) root.Controls.Add(UiKit.Hint("Нажмите правой кнопкой мыши на программе и выберите «В избранное»."));
+            if (fav.Controls.Count == 0) { fav.Dispose(); root.Controls.Add(UiKit.Hint("Нажмите правой кнопкой мыши на программе и выберите «В избранное».")); }
             else root.Controls.Add(fav);
 
             List<AppEntry> recent = new List<AppEntry>();
@@ -114,12 +116,21 @@ namespace SchoolShield
             if (recent.Count > 0)
             {
                 root.Controls.Add(UiKit.Heading("Недавно открывали"));
-                FlowLayoutPanel rec = UiKit.Flow();
+                TileGrid rec = NewGrid();
                 foreach (AppEntry e in recent) rec.Controls.Add(Main.MakeAppTile(e));
                 root.Controls.Add(rec);
             }
             FitWidths();
             root.ResumeLayout();
+        }
+
+        private static TileGrid NewGrid()
+        {
+            TileGrid g = new TileGrid();
+            g.AutoSize = true;
+            g.AutoSizeMode = AutoSizeMode.GrowAndShrink;
+            g.Margin = new Padding(0);
+            return g;
         }
 
         private static IEnumerable<Control> Controls2(Control c)
@@ -136,12 +147,105 @@ namespace SchoolShield
         }
     }
 
+    /// <summary>The greeting card at the top of the home page: a gradient with moving light, a watermark shield, the greeting and the date.</summary>
+    internal sealed class HeroCard : Control, IEnterAnimated
+    {
+        private double enter = 1;
+        private double shine = -1;
+        private Tween enterTween, shineTween;
+
+        public HeroCard()
+        {
+            Height = Metrics.U(Metrics.Compact ? 124 : 148);
+            Width = Metrics.U(900);
+            Margin = new Padding(0, Metrics.U(6), 0, 0);
+            SetStyle(ControlStyles.OptimizedDoubleBuffer | ControlStyles.AllPaintingInWmPaint | ControlStyles.UserPaint | ControlStyles.ResizeRedraw, true);
+        }
+
+        public void PlayEnter(int index)
+        {
+            if (enterTween != null) enterTween.Cancel();
+            if (shineTween != null) shineTween.Cancel();
+            if (!Motion.Enabled) { enter = 1; shine = -1; Invalidate(); return; }
+            enter = 0;
+            enterTween = Tween.Run(700, Easing.OutQuint, delegate (double t) { enter = t; Invalidate(); });
+            shineTween = Tween.Run(1300, Easing.InOutCubic, delegate (double t) { shine = t; Invalidate(); }, delegate { shine = -1; Invalidate(); }, 350);
+        }
+
+        private static string Greeting()
+        {
+            int h = DateTime.Now.Hour;
+            return h < 6 ? "Доброй ночи!" : h < 12 ? "Доброе утро!" : h < 18 ? "Добрый день!" : "Добрый вечер!";
+        }
+
+        private static string DateText()
+        {
+            string d = DateTime.Now.ToString("dddd, d MMMM", new System.Globalization.CultureInfo("ru-RU"));
+            return d.Length > 0 ? char.ToUpper(d[0]) + d.Substring(1) : d;
+        }
+
+        protected override void OnPaintBackground(PaintEventArgs e) { }
+
+        protected override void OnPaint(PaintEventArgs e)
+        {
+            Graphics g = e.Graphics;
+            Fx.Quality(g);
+            g.Clear(Parent != null ? Parent.BackColor : Theme.Background);
+            double en = Math.Max(0, Math.Min(1, enter));
+            RectangleF r = new RectangleF(1, 1 + (float)((1 - en) * Metrics.U(16)), Width - 3, Height - 3);
+            float radius = Metrics.U(26);
+            Color left = Theme.Dark ? Fx.Blend(Theme.Card, Theme.Accent2, 0.55) : Fx.Blend(Color.White, Theme.Accent2, 0.85);
+            Color right = Theme.Dark ? Fx.Blend(Theme.Card, Theme.Accent, 0.40) : Fx.Blend(Color.White, Theme.Accent, 0.85);
+            using (GraphicsPath path = Fx.Round(r, radius))
+            {
+                using (LinearGradientBrush b = Fx.Gradient(r, Fx.Alpha(left, en), Fx.Alpha(right, en), 20f)) g.FillPath(b, path);
+                GraphicsState st = g.Save();
+                g.SetClip(path);
+                // soft lights
+                Fx.Glow(g, new PointF(r.Right - r.Width * 0.12f, r.Y + r.Height * 0.2f), r.Height * 1.5f, Color.White, (int)(46 * en));
+                Fx.Glow(g, new PointF(r.X + r.Width * 0.25f, r.Bottom), r.Height * 1.2f, Theme.Accent, (int)(60 * en));
+                // watermark shield
+                float ss = r.Height * 1.25f;
+                using (GraphicsPath shield = BrandControl.ShieldPath(new RectangleF(r.Right - ss * 0.95f, r.Y - ss * 0.1f, ss, ss)))
+                using (SolidBrush b = new SolidBrush(Color.FromArgb((int)(34 * en), 255, 255, 255)))
+                    g.FillPath(b, shield);
+                // one sweep of light across the card
+                if (shine >= 0 && shine <= 1)
+                {
+                    float x = (float)(r.X - r.Width * 0.3 + shine * r.Width * 1.6);
+                    PointF[] band = new PointF[] { new PointF(x, r.Bottom), new PointF(x + r.Height * 0.55f, r.Y), new PointF(x + r.Height * 0.55f + r.Width * 0.12f, r.Y), new PointF(x + r.Width * 0.12f, r.Bottom) };
+                    using (SolidBrush b = new SolidBrush(Color.FromArgb(34, 255, 255, 255))) g.FillPolygon(b, band);
+                }
+                g.Restore(st);
+                using (Pen pen = new Pen(Color.FromArgb((int)(60 * en), 255, 255, 255), 1.4f)) g.DrawPath(pen, path);
+            }
+
+            float pad = Metrics.U(34);
+            float slide = (float)((1 - Easing.OutCubic(en)) * Metrics.U(30));
+            Color ink = Theme.Dark ? Color.White : Color.FromArgb(15, 23, 42);
+            Fx.Text(g, Greeting(), Fx.Ui(Metrics.Fz(Metrics.Compact ? 24 : 30), FontStyle.Bold), Fx.Alpha(ink, en),
+                new RectangleF(pad - slide, r.Y + r.Height * 0.2f, r.Width - pad * 2, Metrics.U(52)), StringAlignment.Near, StringAlignment.Near, true);
+            Fx.Text(g, DateText(), Fx.Ui(Metrics.Fz(Metrics.Compact ? 12 : 14)), Fx.Alpha(ink, en * 0.78),
+                new RectangleF(pad - slide * 1.4f, r.Y + r.Height * 0.2f + Metrics.U(Metrics.Compact ? 40 : 52), r.Width - pad * 2, Metrics.U(30)), StringAlignment.Near, StringAlignment.Near, true);
+        }
+
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing)
+            {
+                if (enterTween != null) enterTween.Cancel();
+                if (shineTween != null) shineTween.Cancel();
+            }
+            base.Dispose(disposing);
+        }
+    }
+
     // ====================================================================== PROGRAMS
 
     internal sealed class AppsSection : Section
     {
         private readonly FlowLayoutPanel chips = new FlowLayoutPanel();
-        private readonly FlowLayoutPanel grid = new FlowLayoutPanel();
+        private readonly TileGrid grid = new TileGrid();
         private readonly Label empty = new Label();
         private string category = "all";
         private string query = "";
@@ -152,8 +256,7 @@ namespace SchoolShield
             grid.Dock = DockStyle.Fill;
             grid.AutoScroll = true;
             grid.BackColor = Theme.Background;
-            grid.WrapContents = true;
-            grid.FlowDirection = FlowDirection.LeftToRight;
+            grid.Resize += delegate { grid.Relayout(grid.ClientSize.Width - SystemInformation.VerticalScrollBarWidth - Metrics.U(4)); };
 
             chips.Dock = DockStyle.Top;
             chips.AutoSize = true;
@@ -196,6 +299,7 @@ namespace SchoolShield
                 grid.Controls.Add(t);
             }
             grid.ResumeLayout();
+            grid.Relayout(grid.ClientSize.Width - SystemInformation.VerticalScrollBarWidth - Metrics.U(4));
 
             chips.SuspendLayout();
             foreach (Control c in new List<Control>(ChipControls())) { chips.Controls.Remove(c); c.Dispose(); }
@@ -799,7 +903,7 @@ namespace SchoolShield
             if (folder != null)
             {
                 roots = ResolveRoots();
-                if (FileRoots.RootOf(roots, folder) == null) { Ui.Toast("Эта папка недоступна."); return; }
+                if (FileRoots.RootOf(roots, folder) == null) { Ui.Violation(ViolationKind.Folder, folder); return; }
             }
             if (current != null || folder != null) back.Push(current);
             current = folder;
@@ -1012,8 +1116,8 @@ namespace SchoolShield
                 {
                     string name = Path.GetFileName(src);
                     bool isDir = Directory.Exists(src);
-                    if (!isDir && Forbidden(name)) { Ui.Toast("Файлы этого типа запрещены."); continue; }
-                    if (!isDir && !FileFilter.Visible(src, false, Main.Cfg)) { Ui.Toast("Файлы этого типа копировать нельзя."); continue; }
+                    if (!isDir && Forbidden(name)) { Ui.Violation(ViolationKind.File, name); continue; }
+                    if (!isDir && !FileFilter.Visible(src, false, Main.Cfg)) { Ui.Violation(ViolationKind.File, name); continue; }
                     string dst = Unique(current, name);
                     if (isDir)
                     {
@@ -1057,7 +1161,7 @@ namespace SchoolShield
             string name = Microsoft.VisualBasic.Interaction.InputBox("Новое имя:", "Переименовать", old);
             if (!ValidName(name) || name == old) return;
             bool isDir = Directory.Exists(src);
-            if (!isDir && Forbidden(name)) { Ui.Toast("Файлы этого типа запрещены."); return; }
+            if (!isDir && Forbidden(name)) { Ui.Violation(ViolationKind.File, name); return; }
             try
             {
                 string dst = Path.Combine(Path.GetDirectoryName(src), name.Trim());

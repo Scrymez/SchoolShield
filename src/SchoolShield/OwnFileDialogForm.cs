@@ -48,6 +48,7 @@ namespace SchoolShield
             this.cfg = cfg;
 
             Text = save ? "Сохранить файл" : "Открыть файл";
+            Fx.FadeIn(this, 160);
             StartPosition = FormStartPosition.CenterScreen;
             ShowInTaskbar = false;
             TopMost = true;

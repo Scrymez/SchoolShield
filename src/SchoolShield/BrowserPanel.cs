@@ -45,10 +45,10 @@ namespace SchoolShield
         private readonly Config cfg;
         private readonly WebView2 web = new WebView2();
         private readonly Panel bar = new Panel();
-        private readonly Button back = new Button();
-        private readonly Button forward = new Button();
-        private readonly Button reload = new Button();
-        private readonly Button home = new Button();
+        private readonly MotionButton back = new MotionButton(BtnKind.Secondary, "", null);
+        private readonly MotionButton forward = new MotionButton(BtnKind.Secondary, "", null);
+        private readonly MotionButton reload = new MotionButton(BtnKind.Secondary, "", null);
+        private readonly MotionButton home = new MotionButton(BtnKind.Secondary, "", null);
         private readonly TextBox address = new TextBox();
         private readonly Label shield = new Label();
         private WebPolicy policy;
@@ -117,10 +117,7 @@ namespace SchoolShield
         {
             b.Text = glyph;
             b.Font = Theme.IconFont(13);
-            b.FlatStyle = FlatStyle.Flat;
-            b.FlatAppearance.BorderSize = 0;
-            b.BackColor = Theme.Card;
-            b.ForeColor = Theme.Text;
+            b.AutoSize = false;
             b.Cursor = Cursors.Hand;
             b.SetBounds(x, 6, 40, 36);
             b.Click += click;
@@ -280,7 +277,9 @@ namespace SchoolShield
             e.Cancel = true;
             e.Handled = true;
             Log.Write("web", "Скачивание заблокировано: " + e.DownloadOperation.Uri);
-            Ui.Toast("Скачивание файлов запрещено.");
+            string file = "";
+            try { file = System.IO.Path.GetFileName(new Uri(e.DownloadOperation.Uri).AbsolutePath); } catch { }
+            Ui.Violation(ViolationKind.Download, file);
         }
 
         private void OnContextMenu(object sender, CoreWebView2ContextMenuRequestedEventArgs e)
@@ -298,14 +297,14 @@ namespace SchoolShield
                 if (policy.IsGameText(title))
                 {
                     Log.Write("web", "Игровая страница закрыта: " + title);
-                    Ui.Toast("Игры сейчас запрещены.");
-                    ShowHtml(policy.BlockedPage("Игры сейчас запрещены администратором.", "", Theme.Dark));
+                    Ui.Attempts++;
+                    ShowHtml(policy.BlockedPage(ViolationKind.Game, "Игры сейчас запрещены администратором.", title, Theme.Dark, Ui.Attempts));
                     return;
                 }
                 if (!policy.IsBadText(title)) return;
                 Log.Write("web", "Запрещённое слово в заголовке страницы: " + title);
-                Ui.Toast("Запрещённый контент. Страница закрыта.");
-                ShowHtml(policy.BlockedPage("На странице обнаружено запрещённое содержимое.", "", Theme.Dark));
+                Ui.Attempts++;
+                ShowHtml(policy.BlockedPage(ViolationKind.Adult, "На странице обнаружено запрещённое содержимое.", "", Theme.Dark, Ui.Attempts));
             }
             catch { }
         }
@@ -313,7 +312,8 @@ namespace SchoolShield
         private void Deny(NavDecision d, string uri)
         {
             Log.Write("web", "Заблокировано: " + uri + " — " + d.Reason);
-            string html = policy.BlockedPage(d.Reason, d.Host, Theme.Dark);
+            Ui.Attempts++;
+            string html = policy.BlockedPage(d.Kind, d.Reason, d.Host, Theme.Dark, Ui.Attempts);
             BeginInvoke(new Action(delegate { ShowHtml(html); }));
         }
 
