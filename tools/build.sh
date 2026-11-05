@@ -29,7 +29,26 @@ dotnet build src/SchoolShield -c Release -o "$DIST/app" -nologo -v q
 echo "-- payload"
 cp "$DIST"/app/*.exe "$DIST"/app/*.exe.config "$DIST"/app/*.dll "$DIST/payload/"
 [ -d "$DIST/app/runtimes" ] && cp -R "$DIST/app/runtimes" "$DIST/payload/runtimes"   # WebView2Loader.dll must stay in runtimes/win-x64/native
-mkdir -p "$DIST/payload/scripts" "$DIST/payload/config" "$DIST/payload/assets"
+mkdir -p "$DIST/payload/scripts" "$DIST/payload/config" "$DIST/payload/assets" "$DIST/payload/prereq"
+
+# The installer carries what the AI filter and the browser need (Visual C++ runtime, AI model), so nothing has to be downloaded on site
+# (no VPN, no blocked Microsoft/GitHub). The files are cached outside the repository and checked before they go in.
+PREREQ_CACHE="${SS_PREREQ_CACHE:-$HOME/.schoolshield/prereq}"
+mkdir -p "$PREREQ_CACHE"
+MODEL_FILE="$(sed -n 's:.*ModelFile = "\(.*\)";.*:\1:p' src/Shared/Release.cs | head -1)"
+MODEL_SHA="$(sed -n 's:.*ModelSha256 = "\(.*\)";.*:\1:p' src/Shared/Release.cs | head -1)"
+MODEL_URL="$(sed -n 's:.*ModelUrl = "\(.*\)";.*:\1:p' src/Shared/Release.cs | head -1)"
+if [ ! -s "$PREREQ_CACHE/vc_redist.x64.exe" ]; then
+  echo "-- downloading the Visual C++ runtime"
+  curl -fSL --retry 5 -C - -o "$PREREQ_CACHE/vc_redist.x64.exe" https://aka.ms/vs/17/release/vc_redist.x64.exe
+fi
+if [ ! -s "$PREREQ_CACHE/$MODEL_FILE" ] || [ "$(shasum -a 256 "$PREREQ_CACHE/$MODEL_FILE" | cut -d' ' -f1)" != "$MODEL_SHA" ]; then
+  echo "-- downloading the AI model"
+  curl -fSL --retry 5 -C - -o "$PREREQ_CACHE/$MODEL_FILE" "$MODEL_URL"
+fi
+[ "$(shasum -a 256 "$PREREQ_CACHE/$MODEL_FILE" | cut -d' ' -f1)" = "$MODEL_SHA" ] || { echo "!! AI model checksum mismatch" >&2; exit 1; }
+[ "$(head -c 2 "$PREREQ_CACHE/vc_redist.x64.exe")" = "MZ" ] || { echo "!! vc_redist.x64.exe is not an executable" >&2; exit 1; }
+cp "$PREREQ_CACHE/vc_redist.x64.exe" "$PREREQ_CACHE/$MODEL_FILE" "$DIST/payload/prereq/"
 cp scripts/*.ps1 "$DIST/payload/scripts/"
 cp config/* "$DIST/payload/config/"
 cp assets/schoolshield.ico "$DIST/payload/assets/"

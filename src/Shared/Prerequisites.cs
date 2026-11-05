@@ -27,6 +27,24 @@ namespace SchoolShield
         public static readonly Version VcRequired = new Version(14, 38);
 
         public const string VcRedistUrl = "https://aka.ms/vs/17/release/vc_redist.x64.exe";
+        public const string VcRedistFile = "vc_redist.x64.exe";
+
+        /// <summary>
+        /// The installer carries the Visual C++ runtime and the AI model inside itself and leaves them here, so that nothing has to be
+        /// downloaded (and no VPN is needed) on a network where Microsoft or GitHub downloads fail.
+        /// </summary>
+        public static string BundledDir(string installDir)
+        {
+            return string.IsNullOrEmpty(installDir) ? null : Path.Combine(installDir, "prereq");
+        }
+
+        private static string Bundled(string installDir, string file)
+        {
+            string dir = BundledDir(installDir);
+            if (dir == null) return null;
+            string f = Path.Combine(dir, file);
+            return File.Exists(f) ? f : null;
+        }
         public const string WebView2BootstrapperUrl = "https://go.microsoft.com/fwlink/p/?LinkId=2124703";
 
         // ------------------------------------------------------------------ checks
@@ -150,14 +168,28 @@ namespace SchoolShield
             };
         }
 
-        private static bool RunInstaller(string url, string fileName, string args, Action<string> log, string what)
+        /// <summary>Runs a Microsoft installer: the copy that comes with the program if there is one, otherwise a download.</summary>
+        private static bool RunInstaller(string url, string bundledFile, string fileName, string args, Action<string> log, string what)
         {
             string path = Path.Combine(Path.GetTempPath(), fileName);
+            bool temp = true;
             try
             {
-                log("Скачиваю " + what + "…");
-                Downloader.DownloadFile(url, path, Percent(log));
-                if (!IsSignedByMicrosoft(path)) throw new InvalidDataException("подпись файла не принадлежит Microsoft");
+                if (bundledFile != null)
+                {
+                    try
+                    {
+                        if (IsSignedByMicrosoft(bundledFile)) { path = bundledFile; temp = false; log(what + ": беру установщик из комплекта программы, интернет не нужен."); }
+                        else log("! Встроенный установщик " + what + " не прошёл проверку подписи, скачиваю заново.");
+                    }
+                    catch (Exception ex) { log("! Встроенный установщик " + what + ": " + ex.Message + "; скачиваю заново."); }
+                }
+                if (temp)
+                {
+                    log("Скачиваю " + what + "…");
+                    Downloader.DownloadFile(url, path, Percent(log));
+                    if (!IsSignedByMicrosoft(path)) throw new InvalidDataException("подпись файла не принадлежит Microsoft");
+                }
                 log("Устанавливаю " + what + "…");
                 ProcessStartInfo psi = new ProcessStartInfo(path, args);
                 psi.UseShellExecute = false;
@@ -182,7 +214,7 @@ namespace SchoolShield
                 log("! " + what + " не установлен: " + ex.Message);
                 return false;
             }
-            finally { try { File.Delete(path); } catch { } }
+            finally { if (temp) { try { File.Delete(path); } catch { } } }
         }
 
         /// <summary>Installs whatever is missing. Needs administrator rights and internet. Returns true when everything is fine afterwards.</summary>
@@ -194,19 +226,25 @@ namespace SchoolShield
                 log((it.Ok ? "[ok]  " : "[!]   ") + it.Name + ": " + it.Detail);
 
             if (!VcRuntimeOk())
-                RunInstaller(VcRedistUrl, "vc_redist.x64.exe", "/install /quiet /norestart", log, "Visual C++ 2015–2022");
-            if (WebView2Version() == null)
-                RunInstaller(WebView2BootstrapperUrl, "MicrosoftEdgeWebview2Setup.exe", "/silent /install", log, "WebView2 Runtime");
+                RunInstaller(VcRedistUrl, Bundled(installDir, VcRedistFile), VcRedistFile, "/install /quiet /norestart", log, "Visual C++ 2015–2022");
             if (!ModelOk())
             {
                 try
                 {
-                    log("Скачиваю модель ИИ-фильтра (" + (Release.ModelSize / 1024 / 1024) + " МБ)…");
-                    Downloader.InstallModel(Percent(log));
-                    log("Модель установлена.");
+                    string own = Bundled(installDir, Release.ModelFile);
+                    if (own != null && Downloader.InstallModelFrom(own)) log("Модель ИИ-фильтра установлена из комплекта программы, интернет не нужен.");
+                    else
+                    {
+                        log("Скачиваю модель ИИ-фильтра (" + (Release.ModelSize / 1024 / 1024) + " МБ)…");
+                        Downloader.InstallModel(Percent(log));
+                        log("Модель установлена.");
+                    }
                 }
                 catch (Exception ex) { log("! Модель не скачана: " + ex.Message); }
             }
+            // WebView2 last: it is almost always present already, and its bootstrapper is the one piece that needs the network.
+            if (WebView2Version() == null)
+                RunInstaller(WebView2BootstrapperUrl, null, "MicrosoftEdgeWebview2Setup.exe", "/silent /install", log, "WebView2 Runtime");
 
             bool ok = true;
             foreach (PrereqItem it in Check(installDir))

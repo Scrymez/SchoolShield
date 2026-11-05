@@ -46,31 +46,67 @@ namespace SchoolShield
             }
         }
 
-        /// <summary>Downloads to <paramref name="dest"/> through a .part file; progress(done, total) may be null.</summary>
+        private const int DownloadAttempts = 8;
+
+        /// <summary>
+        /// Downloads to <paramref name="dest"/> through a .part file; progress(done, total) may be null. A dropped connection (common on
+        /// school Wi-Fi) does not start the file over: the download resumes from where it stopped, up to several times.
+        /// </summary>
         public static void DownloadFile(string url, string dest, Action<long, long> progress)
         {
             string dir = Path.GetDirectoryName(dest);
             if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
             string part = dest + ".part";
-            using (WebResponse resp = Create(url).GetResponse())
+            try { if (File.Exists(part)) File.Delete(part); } catch { }      // a leftover may belong to another file
+
+            Exception last = null;
+            for (int attempt = 0; attempt < DownloadAttempts; attempt++)
             {
-                long total = resp.ContentLength;
-                using (Stream src = resp.GetResponseStream())
-                using (FileStream dst = new FileStream(part, FileMode.Create, FileAccess.Write))
+                long have = 0;
+                try { if (File.Exists(part)) have = new FileInfo(part).Length; } catch { have = 0; }
+                try
                 {
-                    byte[] buf = new byte[81920];
-                    long done = 0;
-                    int n;
-                    while ((n = src.Read(buf, 0, buf.Length)) > 0)
+                    HttpWebRequest req = Create(url);
+                    if (have > 0) req.AddRange(have);
+                    using (HttpWebResponse resp = (HttpWebResponse)req.GetResponse())
                     {
-                        dst.Write(buf, 0, n);
-                        done += n;
-                        if (progress != null) progress(done, total);
+                        bool resumed = have > 0 && resp.StatusCode == HttpStatusCode.PartialContent;
+                        if (!resumed) have = 0;
+                        long total = resp.ContentLength > 0 ? have + resp.ContentLength : -1;
+                        using (Stream src = resp.GetResponseStream())
+                        using (FileStream dst = new FileStream(part, resumed ? FileMode.Append : FileMode.Create, FileAccess.Write))
+                        {
+                            byte[] buf = new byte[81920];
+                            long done = have;
+                            int n;
+                            while ((n = src.Read(buf, 0, buf.Length)) > 0)
+                            {
+                                dst.Write(buf, 0, n);
+                                done += n;
+                                if (progress != null) progress(done, total);
+                            }
+                            // A mirror that closes the connection early must not leave a truncated file behind.
+                            if (total > 0 && done != total) throw new IOException("Загрузка оборвалась: получено " + done + " из " + total + " байт.");
+                        }
                     }
-                    // A mirror that closes the connection early must not leave a truncated file behind.
-                    if (total > 0 && done != total) throw new IOException("Загрузка оборвалась: получено " + done + " из " + total + " байт. Повторите попытку.");
+                    last = null;
+                    break;
+                }
+                catch (Exception ex)
+                {
+                    last = ex;
+                    WebException we = ex as WebException;
+                    HttpWebResponse hr = we == null ? null : we.Response as HttpWebResponse;
+                    if (hr != null)
+                    {
+                        if (hr.StatusCode == HttpStatusCode.RequestedRangeNotSatisfiable) { try { File.Delete(part); } catch { } continue; }
+                        // 404, 403 and the like will not fix themselves
+                        if ((int)hr.StatusCode >= 400 && (int)hr.StatusCode < 500 && hr.StatusCode != HttpStatusCode.RequestTimeout && (int)hr.StatusCode != 429) throw;
+                    }
+                    if (attempt + 1 < DownloadAttempts) System.Threading.Thread.Sleep(1500 * (attempt + 1));
                 }
             }
+            if (last != null) throw last;
             if (File.Exists(dest)) File.Delete(dest);
             File.Move(part, dest);
         }
@@ -85,6 +121,19 @@ namespace SchoolShield
                 foreach (byte b in h) sb.Append(b.ToString("x2"));
                 return sb.ToString();
             }
+        }
+
+        /// <summary>Copies the AI model that came inside the installer into place. False when the file is not the right one.</summary>
+        public static bool InstallModelFrom(string source)
+        {
+            if (!File.Exists(source) || new FileInfo(source).Length != Release.ModelSize) return false;
+            if (!string.Equals(Sha256Hex(source), Release.ModelSha256, StringComparison.OrdinalIgnoreCase)) return false;
+            Directory.CreateDirectory(Release.ModelDir);
+            string tmp = Release.ModelPath + ".copy";
+            File.Copy(source, tmp, true);
+            if (File.Exists(Release.ModelPath)) File.Delete(Release.ModelPath);
+            File.Move(tmp, Release.ModelPath);
+            return true;
         }
 
         /// <summary>Installs the AI model into %ProgramData%\SchoolShield\models after checking its SHA-256.</summary>
