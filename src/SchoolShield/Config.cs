@@ -168,8 +168,14 @@ namespace SchoolShield
         public bool AllowGames = false;
         public List<string> GameExceptions = new List<string>();
 
-        // Removable drives for the student: "block" | "readonly" | "allow".
-        public string UsbMode = "block";
+        // Removable drives for the student: "block" (not visible at all) | "readonly" (copy from a flash drive, not onto it) | "allow" (read and write).
+        public string UsbMode = "readonly";
+
+        // Extra file types a student may see and open (".ev3 .mpd"). Installers and scripts can never be added here (see FileFilter).
+        public List<string> AllowedExtensions = new List<string>();
+
+        // Bumped when a new launcher section appears, so that older config.json files get it once (the administrator may switch it off later).
+        public int SectionsVersion = 0;
 
         public AiSettings Ai = new AiSettings();
         public BrowserSettings Browser = new BrowserSettings();
@@ -202,7 +208,7 @@ namespace SchoolShield
                 ".vbs", ".vbe", ".wsf", ".scr", ".com", ".jar", ".apk", ".iso", ".img", ".reg",
                 ".zip", ".rar", ".7z", ".torrent"
             });
-            Sections.AddRange(new string[] { "home", "apps", "docs", "media", "files", "web", "system" });
+            Sections.AddRange(new string[] { "home", "apps", "docs", "media", "files", "usb", "web", "system" });
             Browser.VideoSites.AddRange(new string[] { "youtube.com", "youtu.be", "youtube-nocookie.com", "rutube.ru", "vkvideo.ru", "vk.com", "vk.ru" });
 
             CategoryRules.AddRange(DefaultCategoryRules());
@@ -242,7 +248,7 @@ namespace SchoolShield
                 // программирование
                 "idle", "thonny", "lazarus", "pascal", "алгоритм", "visual studio", "vs code", "vscode", "code::blocks", "codeblocks", "dev-c",
                 "devc", "pycharm", "notepad++", "github", "git bash", "gitkraken", "java", "arduino", "intellij", "eclipse", "android studio",
-                "python", "unity", "mblock", "makecode", "micro:bit", "microbit", "kodu", "pascalabc", "gcompris",
+                "python", "unity", "mblock", "makecode", "micro:bit", "microbit", "kodu", "pascalabc", "gcompris", "trik", "fritzing", "ardublock", "lego education",
                 // 3D-моделирование и печать
                 "3d", "blender", "tinkercad", "sketchup", "freecad", "компас", "kompas", "autocad", "solidworks", "fusion", "cura",
                 "openscad", "meshmixer", "nanocad",
@@ -384,6 +390,17 @@ namespace SchoolShield
 
         internal void MergeDefaults()
         {
+            if (AllowedExtensions == null) AllowedExtensions = new List<string>();
+            if (SectionsVersion < 2)
+            {
+                // Version 2 brought the "Flash drives" section: add it once to configs written earlier (the administrator can switch it off afterwards).
+                if (!Sections.Exists(delegate (string x) { return string.Equals(x, "usb", StringComparison.OrdinalIgnoreCase); }))
+                {
+                    int at = Sections.FindIndex(delegate (string x) { return string.Equals(x, "files", StringComparison.OrdinalIgnoreCase); });
+                    Sections.Insert(at < 0 ? Sections.Count : at + 1, "usb");
+                }
+                SectionsVersion = 2;
+            }
             // Programming merged into "Учебное ПО".
             CategoryRules.RemoveAll(delegate (CategoryRule x) { return x.Id == "dev"; });
             List<string> keys = new List<string>(AppCategories.Keys);

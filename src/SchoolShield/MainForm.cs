@@ -31,7 +31,9 @@ namespace SchoolShield
         private SearchBox search;
         private readonly System.Windows.Forms.Timer wifiTimer = new System.Windows.Forms.Timer();
         private readonly System.Windows.Forms.Timer configTimer = new System.Windows.Forms.Timer();
+        private readonly System.Windows.Forms.Timer driveTimer = new System.Windows.Forms.Timer();
         private DateTime configStamp;
+        private string driveLetters;                  // null until the first look: drives that were there at the start do not make a toast
         private readonly ToolTip sidebarTips = new ToolTip();
         private Section current;
         private bool suppressSearch;
@@ -112,6 +114,7 @@ namespace SchoolShield
             AddSection(new DocsSection(this));
             AddSection(new MediaSection(this));
             AddSection(new FilesSection(this));
+            AddSection(new UsbSection(this));
             AddSection(new WebSection(this));
             AddSection(new SystemSection(this));
 
@@ -304,6 +307,7 @@ namespace SchoolShield
             clockTimer.Interval = 1000;
             clockTimer.Tick += delegate { UpdateHeader(); };
             clockTimer.Start();
+            StartDriveWatch();
 
             if (State.Windowed)
             {
@@ -358,6 +362,37 @@ namespace SchoolShield
             Activate();
         }
 
+        /// <summary>A toast when a flash drive is plugged in or taken out (the "Flash drives" section also refreshes itself).</summary>
+        private void StartDriveWatch()
+        {
+            driveTimer.Interval = 2500;
+            driveTimer.Tick += delegate { CheckDrives(); };
+            driveTimer.Start();
+        }
+
+        private void CheckDrives()
+        {
+            try
+            {
+                string mode = (Cfg.UsbMode ?? "readonly").ToLowerInvariant();
+                if (!Cfg.SectionEnabled("usb") || (mode == "block" && !State.Privileged)) { driveLetters = ""; return; }
+                List<DriveEntry> now = Drives.List();
+                List<string> letters = new List<string>();
+                foreach (DriveEntry d in now) letters.Add(d.Letter);
+                string joined = string.Join(",", letters.ToArray());
+                string before = driveLetters;
+                driveLetters = joined;
+                if (before == null || before == joined) return;
+                foreach (DriveEntry d in now)
+                    if (("," + before + ",").IndexOf("," + d.Letter + ",", StringComparison.OrdinalIgnoreCase) < 0)
+                    {
+                        Log.Write("usb", "Подключено: " + d.Title);
+                        Ui.Toast("Подключена: " + d.Title + ". Откройте раздел «Флешки и диски».");
+                    }
+            }
+            catch { }
+        }
+
         private void CheckConfigChange()
         {
             try
@@ -369,6 +404,9 @@ namespace SchoolShield
                 Config fresh = Config.Load();            // also publishes State.GamesAllowed and State.GameExceptions
                 Cfg.AllowGames = fresh.AllowGames;
                 Cfg.GameExceptions = fresh.GameExceptions;
+                Cfg.UsbMode = fresh.UsbMode;
+                Cfg.AllowedExtensions = fresh.AllowedExtensions;
+                if (!State.Soft) UserPolicy.ApplyUsb(Cfg);        // the flash-drive mode takes effect at once
                 ReloadCatalog();                          // also after the administrator installed a program from the catalog
                 if (before == State.GamesAllowed) return;
                 Log.Write("games", State.GamesAllowed ? "Игры разрешены администратором" : "Игры запрещены администратором");
@@ -455,6 +493,7 @@ namespace SchoolShield
                 hotTimer.Stop();
                 wifiTimer.Stop();
                 configTimer.Stop();
+                driveTimer.Stop();
                 if (holdOverlay != null) holdOverlay.Dispose();
                 clockTimer.Stop();
                 if (hook != null) hook.Dispose();
@@ -641,9 +680,14 @@ namespace SchoolShield
                     Ui.Toast("Файлы этого типа запрещены.");
                     return;
                 }
-                if (!State.Privileged && FileRoots.RootOf(FileRoots.Resolve(Cfg), path) == null)
+                if (!State.Privileged && FileRoots.RootOf(FileRoots.ResolveAll(Cfg), path) == null)
                 {
                     Ui.Toast("Этот файл вне разрешённых папок.");
+                    return;
+                }
+                if (!FileFilter.Allowed(path, Cfg) && !State.Privileged)
+                {
+                    Ui.Toast("Файлы этого типа открыть нельзя.");
                     return;
                 }
                 if (FileKinds.Of(path) == FileKind.Image && Cfg.Ai.Enabled)

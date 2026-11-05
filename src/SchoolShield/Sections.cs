@@ -91,6 +91,7 @@ namespace SchoolShield
             AddQuick(quick, "docs", "Документы", "");
             AddQuick(quick, "media", "Фото, видео, музыка", "");
             AddQuick(quick, "files", "Мои файлы", "");
+            AddQuick(quick, "usb", "Флешки", "\uE88E");
             AddQuick(quick, "web", "Интернет", "");
             root.Controls.Add(quick);
 
@@ -664,7 +665,7 @@ namespace SchoolShield
     /// The only way to browse files. Limited to the allowed folders (documents, desktop, downloads, pictures...);
     /// there is no path box, no drives list and no way up past a root.
     /// </summary>
-    internal sealed class FilesSection : Section
+    internal class FilesSection : Section
     {
         private sealed class Actions : FileManagerActions
         {
@@ -679,16 +680,17 @@ namespace SchoolShield
         }
 
         private readonly Actions actions;
-        private readonly ListView list = UiKit.List(true);
+        protected readonly ListView list = UiKit.List(true);
         private readonly ImageList icons = new ImageList();
         private readonly FlowLayoutPanel bar = new FlowLayoutPanel();
         private readonly Label where = new Label();
         private readonly Button binButton;
         private readonly Stack<string> back = new Stack<string>();
-        private List<FileRoot> roots = new List<FileRoot>();
-        private string current;                       // null = list of roots
-        private List<string> clip = new List<string>();
-        private bool clipCut;
+        protected List<FileRoot> roots = new List<FileRoot>();
+        protected string current;                     // null = list of roots
+        // shared by the "My files" and "Flash drives" sections: copy on a flash drive, paste into My files
+        private static List<string> clip = new List<string>();
+        private static bool clipCut;
         private string query = "";
 
         public FilesSection(MainForm main) : base(main)
@@ -739,6 +741,36 @@ namespace SchoolShield
         public override string Title { get { return "Мои файлы"; } }
         public override string Glyph { get { return ""; } }
 
+        /// <summary>A text button on the tool bar (the sections derived from this one add their own).</summary>
+        protected Button AddTextTool(string text, string tip, EventHandler click)
+        {
+            Button b = UiKit.Flat(text, click);
+            b.Font = Theme.UiFont(10.5f);
+            b.Padding = new Padding(10, 4, 10, 4);
+            ToolTip t = new ToolTip();
+            t.SetToolTip(b, tip);
+            bar.Controls.Add(b);
+            return b;
+        }
+
+        protected virtual List<FileRoot> ResolveRoots() { return FileRoots.Resolve(Main.Cfg); }
+        protected virtual string RootsTitle { get { return "Выберите папку"; } }
+        protected virtual string EmptyRootsText { get { return "Нет доступных папок."; } }
+
+        /// <summary>Re-reads the roots (a drive came or went) and redraws; leaves a root that is gone.</summary>
+        protected void RefreshRoots()
+        {
+            roots = ResolveRoots();
+            if (current != null && FileRoots.RootOf(roots, current) == null) { current = null; Ui.Toast("Эта папка больше недоступна."); }
+            Reload();
+        }
+
+        protected void ShowRoots()
+        {
+            current = null;
+            Reload();
+        }
+
         private Button AddTool(string glyph, string tip, EventHandler click)
         {
             Button b = UiKit.Flat(glyph, click);
@@ -753,7 +785,7 @@ namespace SchoolShield
         public override void OnShown()
         {
             binButton.Visible = State.Privileged;   // the recycle bin can be emptied by the administrator only
-            roots = FileRoots.Resolve(Main.Cfg);
+            roots = ResolveRoots();
             if (current != null && FileRoots.RootOf(roots, current) == null) current = null;
             Reload();
         }
@@ -766,7 +798,7 @@ namespace SchoolShield
         {
             if (folder != null)
             {
-                roots = FileRoots.Resolve(Main.Cfg);
+                roots = ResolveRoots();
                 if (FileRoots.RootOf(roots, folder) == null) { Ui.Toast("Эта папка недоступна."); return; }
             }
             if (current != null || folder != null) back.Push(current);
@@ -777,7 +809,7 @@ namespace SchoolShield
         /// <summary>Jump to a file's folder and select it (from the "Show in Files" menu item).</summary>
         public void Reveal(string file)
         {
-            roots = FileRoots.Resolve(Main.Cfg);
+            roots = ResolveRoots();
             string dir = Path.GetDirectoryName(file);
             if (FileRoots.RootOf(roots, dir) == null) return;
             current = dir;
@@ -807,7 +839,7 @@ namespace SchoolShield
             if (bmp != null && !icons.Images.ContainsKey(key)) icons.Images.Add(key, bmp);
         }
 
-        private void Reload()
+        protected void Reload()
         {
             list.BeginUpdate();
             list.Items.Clear();
@@ -815,7 +847,15 @@ namespace SchoolShield
 
             if (current == null)
             {
-                where.Text = "Выберите папку";
+                where.Text = RootsTitle;
+                if (roots.Count == 0)
+                {
+                    ListViewItem none = new ListViewItem(EmptyRootsText);
+                    none.ForeColor = Theme.Muted;
+                    none.SubItems.Add("");
+                    none.SubItems.Add("");
+                    list.Items.Add(none);        // Tag stays null: nothing to open
+                }
                 foreach (FileRoot r in roots)
                 {
                     ListViewItem it = new ListViewItem(r.Name + (r.ReadOnly ? "  (только чтение)" : ""));
@@ -855,6 +895,7 @@ namespace SchoolShield
                 if ((a & (FileAttributes.Hidden | FileAttributes.System)) != 0) return;
             }
             catch { return; }
+            if (!FileFilter.Visible(path, isDir, Main.Cfg)) return;   // students see educational files only (no installers, scripts, shortcuts)
 
             string key = "<dir>";
             if (!isDir)
@@ -881,17 +922,18 @@ namespace SchoolShield
 
         // ---------------------------------------------------------------- selection and menu
 
-        private List<string> SelectedPaths()
+        protected List<string> SelectedPaths()
         {
             List<string> r = new List<string>();
-            foreach (ListViewItem it in list.SelectedItems) r.Add((string)it.Tag);
+            foreach (ListViewItem it in list.SelectedItems) if (it.Tag is string) r.Add((string)it.Tag);
             return r;
         }
 
         private void OpenSelected()
         {
             if (list.SelectedItems.Count == 0) return;
-            string p = (string)list.SelectedItems[0].Tag;
+            string p = list.SelectedItems[0].Tag as string;
+            if (p == null) return;
             if (Directory.Exists(p)) Navigate(p);
             else Main.OpenFile(p);
         }
@@ -900,7 +942,7 @@ namespace SchoolShield
         {
             if (e.Button != MouseButtons.Right) return;
             ListViewItem it = list.GetItemAt(e.X, e.Y);
-            if (it == null) return;
+            if (it == null || !(it.Tag is string)) return;
             if (!it.Selected) { list.SelectedItems.Clear(); it.Selected = true; }
             string p = (string)it.Tag;
             Menus.ForFile(Main, p, Directory.Exists(p), current == null ? null : actions);
@@ -971,11 +1013,20 @@ namespace SchoolShield
                     string name = Path.GetFileName(src);
                     bool isDir = Directory.Exists(src);
                     if (!isDir && Forbidden(name)) { Ui.Toast("Файлы этого типа запрещены."); continue; }
+                    if (!isDir && !FileFilter.Visible(src, false, Main.Cfg)) { Ui.Toast("Файлы этого типа копировать нельзя."); continue; }
                     string dst = Unique(current, name);
                     if (isDir)
                     {
                         if (dst.StartsWith(src + "\\", StringComparison.OrdinalIgnoreCase)) continue;   // into itself
-                        if (clipCut) Microsoft.VisualBasic.FileIO.FileSystem.MoveDirectory(src, dst);
+                        if (!State.Privileged)
+                        {
+                            // A student's folder copy takes educational files only; a move deletes the source only when nothing was left out.
+                            int skipped;
+                            FileFilter.CopyDirectory(src, dst, Main.Cfg, false, out skipped);
+                            if (clipCut && skipped == 0) Directory.Delete(src, true);
+                            else if (skipped > 0) Ui.Toast("Скопированы только учебные файлы. Пропущено: " + skipped);
+                        }
+                        else if (clipCut) Microsoft.VisualBasic.FileIO.FileSystem.MoveDirectory(src, dst);
                         else Microsoft.VisualBasic.FileIO.FileSystem.CopyDirectory(src, dst);
                     }
                     else if (clipCut) File.Move(src, dst);

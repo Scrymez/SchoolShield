@@ -103,8 +103,19 @@ namespace SchoolShield
             SetString(@"Control Panel\Accessibility\Keyboard Response", "Flags", "122");
             SetString(@"Control Panel\Accessibility\ToggleKeys", "Flags", "58");
 
+            ApplyUsb(cfg);
+            Log.Write("policy", "Пользовательские ограничения применены (флешки: " + (cfg.UsbMode ?? "readonly") + ")");
+        }
+
+        /// <summary>
+        /// Flash drives for the student. "block": Windows denies everything on removable media. "readonly": reading and copying from a flash
+        /// drive works, writing and running do not. "allow": reading and writing work, running from a flash drive stays blocked
+        /// (programs only start from Windows and Program Files). The launcher calls this again when the administrator changes the mode.
+        /// </summary>
+        public static void ApplyUsb(Config cfg)
+        {
             string rs = @"Software\Policies\Microsoft\Windows\RemovableStorageDevices\" + RemovableGuid;
-            string mode = (cfg.UsbMode ?? "block").ToLowerInvariant();
+            string mode = (cfg.UsbMode ?? "readonly").ToLowerInvariant();
             if (mode == "block")
             {
                 SetDword(rs, "Deny_Read", 1);
@@ -121,10 +132,8 @@ namespace SchoolShield
             {
                 DeleteValue(rs, "Deny_Read");
                 DeleteValue(rs, "Deny_Write");
-                DeleteValue(rs, "Deny_Execute");
+                SetDword(rs, "Deny_Execute", 1);       // programs never run from a flash drive, even when writing is allowed
             }
-
-            Log.Write("policy", "Пользовательские ограничения применены (USB: " + mode + ")");
         }
     }
 }

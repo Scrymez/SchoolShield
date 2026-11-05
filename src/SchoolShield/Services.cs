@@ -150,6 +150,8 @@ namespace SchoolShield
         public string Path;
         public bool ReadOnly;
         public bool NoIndex;    // whole disks: shown in the file manager, never scanned for the Documents / Media lists
+        public bool Removable;  // a flash drive or external disk (the "Flash drives" section)
+        public string Letter;   // "E:" for a removable drive
     }
 
     internal static class FileKinds
@@ -236,6 +238,14 @@ namespace SchoolShield
         {
             string full = Path.GetFullPath(path).TrimEnd('\\');
             return full.Length == 2 && full[1] == ':' ? full + "\\" : full;   // "C:" would mean "the current folder of drive C"
+        }
+
+        /// <summary>Every folder the student may open files from: the usual roots plus connected flash drives (unless the administrator closed them).</summary>
+        public static List<FileRoot> ResolveAll(Config cfg)
+        {
+            List<FileRoot> list = Resolve(cfg);
+            try { list.AddRange(Drives.Roots(cfg)); } catch { }
+            return list;
         }
 
         private static string Prefix(string rootPath)

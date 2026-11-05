@@ -22,7 +22,7 @@
 .PARAMETER Dns           AdGuardFamily (по умолчанию: блокирует рекламу, взрослые сайты, включает SafeSearch) | YandexCloudflare | Yandex | Cloudflare | CleanBrowsing | None
 .PARAMETER WebMode       Filter (по умолчанию: интернет с фильтром) | Whitelist (только сайты из whitelist.txt)
 .PARAMETER Downloads     BlockAll (по умолчанию) | Dangerous | Off - скачивания в браузерах.
-.PARAMETER Usb           block (по умолчанию) | readonly | allow - флешки у ученика.
+.PARAMETER Usb           block - флешки закрыты | readonly (по умолчанию) - с флешки можно только читать и копировать | allow - чтение и запись.
 .PARAMETER NoShell       Не менять оболочку Windows. Для первой проверки: всё настроено, но рабочий стол остаётся обычным.
 .PARAMETER NoAutoLogon   Не включать автовход ученика.
 .PARAMETER NoDnsFirewall Не создавать правила брандмауэра против обхода DNS.
@@ -40,7 +40,7 @@ param(
     [ValidateSet('AdGuardFamily', 'YandexCloudflare', 'Yandex', 'Cloudflare', 'CleanBrowsing', 'None')][string]$Dns = 'AdGuardFamily',
     [ValidateSet('Filter', 'Whitelist')][string]$WebMode = 'Filter',
     [ValidateSet('BlockAll', 'Dangerous', 'Off')][string]$Downloads = 'BlockAll',
-    [ValidateSet('block', 'readonly', 'allow')][string]$Usb = 'block',
+    [ValidateSet('block', 'readonly', 'allow')][string]$Usb = 'readonly',
     [switch]$NoShell,
     [switch]$NoAutoLogon,
     [switch]$NoDnsFirewall,
@@ -597,7 +597,7 @@ if ($NoShell) {
     }
     Set-Reg $OwnKey 'InstallDir' $InstallDir 'String'
     Set-Reg $OwnKey 'StudentUser' $StudentUser 'String'
-    Set-Reg $OwnKey 'Version' '2.4.0' 'String'
+    Set-Reg $OwnKey 'Version' '2.5.0' 'String'
     Set-Reg $Winlogon 'Shell' ('"' + $exeInstalled + '"') 'String'
     Write-Ok 'Лаунчер зарегистрирован как оболочка. Администраторам он откроет обычный рабочий стол.'
 }

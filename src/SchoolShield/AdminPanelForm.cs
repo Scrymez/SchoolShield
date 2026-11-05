@@ -133,6 +133,29 @@ namespace SchoolShield
         }
     }
 
+    /// <summary>A flash-drive mode with its Russian name, for combo boxes.</summary>
+    internal sealed class UsbModeItem
+    {
+        public string Value;
+        public string Text;
+        public override string ToString() { return Text; }
+
+        public static UsbModeItem[] All()
+        {
+            return new UsbModeItem[] {
+                new UsbModeItem { Value = "block", Text = "Закрыты полностью" },
+                new UsbModeItem { Value = "readonly", Text = "Только чтение (рекомендуется)" },
+                new UsbModeItem { Value = "allow", Text = "Чтение и запись учебных файлов" }
+            };
+        }
+
+        public static UsbModeItem Find(string value)
+        {
+            foreach (UsbModeItem i in All()) if (string.Equals(i.Value, value, StringComparison.OrdinalIgnoreCase)) return i;
+            return null;
+        }
+    }
+
     /// <summary>First-run wizard / "turn protection on": collects the options and runs the installer script.</summary>
     internal sealed class ProtectionWizard : Form
     {
@@ -207,9 +230,14 @@ namespace SchoolShield
             Combo(web, 330, y, 290, new string[] { "Filter", "Whitelist" }, cfg.Install.WebMode);
             y += 40;
 
-            AddLabel("Скачивания в браузерах", y); AddLabel("Флешки у ученика", y, 330); y += 24;
+            AddLabel("Скачивания в браузерах", y); AddLabel("Флешки и внешние диски у ученика", y, 330); y += 24;
             Combo(downloads, 20, y, 290, new string[] { "BlockAll", "Dangerous", "Off" }, cfg.Install.Downloads);
-            Combo(usb, 330, y, 290, new string[] { "block", "readonly", "allow" }, cfg.UsbMode);
+            usb.SetBounds(330, y, 290, 28);
+            usb.DropDownStyle = ComboBoxStyle.DropDownList;
+            usb.Items.AddRange(UsbModeItem.All());
+            usb.SelectedItem = UsbModeItem.Find(cfg.UsbMode);
+            if (usb.SelectedIndex < 0) usb.SelectedIndex = 1;
+            Controls.Add(usb);
             y += 44;
 
             autologon.Text = "Автоматический вход под учеником при включении ПК";
@@ -305,7 +333,7 @@ namespace SchoolShield
                 Protection.EnsureConfigFiles();
                 Config fresh = Config.Load();
                 fresh.AdminHotkey = hotkey.Text;
-                fresh.UsbMode = (string)usb.SelectedItem;
+                fresh.UsbMode = ((UsbModeItem)usb.SelectedItem).Value;
                 fresh.Install.StudentUser = name;
                 fresh.Install.Dns = (string)dns.SelectedItem;
                 fresh.Install.WebMode = (string)web.SelectedItem;
@@ -1345,10 +1373,25 @@ namespace SchoolShield
             Lbl(p, "Игровые сайты, которые открываются даже при запрете (по одному в строке: домен или домен/путь), например education.minecraft.net", 0, y, 820, true); y += 24;
             TextBox gameEx = Memo(p, 0, y, 810, 70, string.Join(Environment.NewLine, cfg.GameExceptions.ToArray())); y += 86;
 
+            Lbl(p, "Флешки и внешние диски (раздел «Флешки и диски»)", 0, y, 500, true); y += 26;
+            ComboBox usbBox = new ComboBox();
+            usbBox.SetBounds(0, y, 420, 28);
+            usbBox.DropDownStyle = ComboBoxStyle.DropDownList;
+            usbBox.Items.AddRange(UsbModeItem.All());
+            usbBox.SelectedItem = UsbModeItem.Find(cfg.UsbMode);
+            if (usbBox.SelectedIndex < 0) usbBox.SelectedIndex = 1;
+            p.Controls.Add(usbBox);
+            y += 36;
+            Label usbNote = Lbl(p, "Ученик видит на флешке только папки и учебные файлы: документы, таблицы, презентации, картинки, музыку, видео, код, скетчи, "
+                + "3D-модели и проекты LEGO EV3, SPIKE и других роботов. Установочные файлы (exe, msi, скрипты, ярлыки) скрыты, а запускать что-либо с флешки Windows не даёт.", 0, y, 830, true);
+            usbNote.AutoSize = false; usbNote.Height = 44; y += 48;
+            Lbl(p, "Ещё разрешённые типы файлов (через пробел), например .mpd .xyz. Установочные типы добавить нельзя.", 0, y, 830, true); y += 24;
+            TextBox extBox = Txt(p, 0, y, 810, string.Join(" ", cfg.AllowedExtensions.ToArray())); y += 44;
+
             Lbl(p, "Разделы лаунчера", 0, y, 300, true); y += 26;
             string[][] secs = new string[][] {
                 new string[] { "home", "Главная" }, new string[] { "apps", "Программы" }, new string[] { "docs", "Документы" },
-                new string[] { "media", "Фото, видео, музыка" }, new string[] { "files", "Мои файлы" }, new string[] { "web", "Интернет" },
+                new string[] { "media", "Фото, видео, музыка" }, new string[] { "files", "Мои файлы" }, new string[] { "usb", "Флешки и диски" }, new string[] { "web", "Интернет" },
                 new string[] { "system", "Компьютер" }
             };
             List<CheckBox> secBoxes = new List<CheckBox>();
@@ -1389,6 +1432,17 @@ namespace SchoolShield
                 cfg.Browser.BlockAdNetworks = bAds.Checked;
                 cfg.Browser.AllowDownloads = bDl.Checked;
                 cfg.AdminClickGesture = gesture.Checked;
+                cfg.UsbMode = ((UsbModeItem)usbBox.SelectedItem).Value;
+                List<string> rejected = new List<string>();
+                cfg.AllowedExtensions = new List<string>();
+                foreach (string raw in extBox.Text.Split(new char[] { ' ', ',', ';', '\t', '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries))
+                {
+                    string e = FileFilter.Normalize(raw);
+                    if (e.Length == 0 || FileFilter.IsNever(e)) rejected.Add(raw);
+                    else if (!cfg.AllowedExtensions.Contains(e)) cfg.AllowedExtensions.Add(e);
+                }
+                if (rejected.Count > 0)
+                    MessageBox.Show(this, "Эти типы не добавлены (установочные или записаны неверно): " + string.Join(" ", rejected.ToArray()), "Типы файлов");
                 bool gamesChanged = cfg.AllowGames != games.Checked;
                 List<string> exBefore = new List<string>(cfg.GameExceptions);
                 cfg.AllowGames = games.Checked;
