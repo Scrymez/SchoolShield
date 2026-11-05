@@ -325,7 +325,7 @@ if (-not $script:DryRun) {
     if (-not (Test-Path -LiteralPath $OwnKey)) { New-Item -Path $OwnKey -Force | Out-Null }
     Set-Reg $OwnKey 'InstallDir' $InstallDir 'String'
     Set-Reg $OwnKey 'Edition' 'teacher' 'String'
-    Set-Reg $OwnKey 'Version' '2.5.1' 'String'
+    Set-Reg $OwnKey 'Version' '2.5.2' 'String'
     Set-Reg $OwnKey 'Configured' 1
 }
 

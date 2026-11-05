@@ -198,7 +198,8 @@ namespace SchoolShield
                         return;
                     }
                     if (exitAfterLaunch) { Application.Exit(); return; }
-                    SetState("Установщик запущен: его окно покажет ход установки (обычно до минуты). Когда он напишет «Обновление установлено», перезагрузите компьютер.", false);
+                    SetState("Установщик запущен: его окно покажет ход установки (обычно до минуты). Когда он напишет «Обновление установлено», перезагрузите компьютер. "
+                        + "Охрана приостановлена на 20 минут; чтобы вернуть её раньше, введите lock в терминале.", false);
                     bar.Visible = false;
                 });
             });
@@ -263,6 +264,13 @@ namespace SchoolShield
             check.Enabled = false;
             bar.Visible = true;
             bar.Value = 0;
+            if (!exitAfterLaunch)
+            {
+                // Inside the student shell the guard deletes any .exe that appears in %TEMP% and kills programs started from there. Only an
+                // administrator who entered the code can reach this page, so the guard is paused for the time of the update (as "unlock" does).
+                State.EnableAdmin(20);
+                Log.Write("update", "Админ-режим на 20 минут на время обновления");
+            }
             SetState("Скачиваю " + found.SetupName + "…", false);
             UpdateInfo info = found;
             Thread t = new Thread(delegate ()
@@ -273,6 +281,8 @@ namespace SchoolShield
                     {
                         if (total > 0) UiPost(delegate { bar.Value = (int)Math.Min(100, done * 100 / total); });
                     });
+                    if (!File.Exists(path))
+                        throw new FileNotFoundException("Скачанный установщик пропал: его удалила охрана лаунчера или антивирус. Введите в терминале unlock 30 и повторите обновление.");
                     UiPost(delegate
                     {
                         // Windows is about to ask for administrator rights. Do not stay on top of its window, and say what to do.

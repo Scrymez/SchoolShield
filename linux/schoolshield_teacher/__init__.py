@@ -3,7 +3,7 @@
 Только стандартная библиотека Python 3.8+. Автор: Латипов С.А. Лицензия MIT.
 """
 
-VERSION = "2.5.1"
+VERSION = "2.5.2"
 APP_ID = "schoolshield-teacher"
 AUTHOR = "Латипов С.А."
 REPO = "Scrymez/SchoolShield"
