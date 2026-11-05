@@ -116,13 +116,22 @@ namespace SchoolShield
         /// <summary>Runs work on a background thread and streams its lines into the window.</summary>
         public static void RunWork(IWin32Window owner, string title, Func<Action<string>, bool> work)
         {
+            RunWorkCode(owner, title, delegate (Action<string> log) { return work(log) ? 0 : 1; });
+        }
+
+        /// <summary>
+        /// Like <see cref="RunWork"/>, but the work returns an exit code. The window is on screen at once and the work (downloads,
+        /// a script) runs on a background thread, so the panel never freezes while it waits for the network or a long script.
+        /// </summary>
+        public static void RunWorkCode(IWin32Window owner, string title, Func<Action<string>, int> work)
+        {
             ScriptRunDialog d = new ScriptRunDialog(title);
             System.Threading.ThreadPool.QueueUserWorkItem(delegate
             {
-                bool ok = false;
-                try { ok = work(d.Append); }
+                int code = 1;
+                try { code = work(d.Append); }
                 catch (Exception ex) { d.Append("! " + ex.Message); }
-                d.Finished(ok ? 0 : 1);
+                d.Finished(code);
             });
             d.ShowDialog(owner);
         }
@@ -513,18 +522,24 @@ namespace SchoolShield
             string code = keepCode.Checked ? null : code1.Text;
             bool shellless = noShell.Checked;
             Hide();
-            ScriptRunDialog.Run(this, "Включение защиты", delegate (Protection.DataReceived output)
+            // Everything slow (downloading Visual C++, WebView2 and the model, then the script itself) runs on a background thread:
+            // the progress window is on screen at once and the panel stays alive.
+            ScriptRunDialog.RunWorkCode(this, "Включение защиты", delegate (Action<string> output)
             {
                 if (downloadModel)
                 {
                     try
                     {
-                        Prerequisites.Repair(AppInfo.InstallDir, delegate (string l) { output(l); });
+                        output("Проверяю и докачиваю компоненты (нужен интернет, это может занять несколько минут)…");
+                        Prerequisites.Repair(AppInfo.InstallDir, output);
                         NsfwEngine.Reset();
                     }
                     catch (Exception ex) { output("! Компоненты не установлены: " + ex.Message + " (можно повторить на вкладке «ИИ-фильтр»)"); }
                 }
-                return Protection.StartApply(cfg.Install, cfg.UsbMode, code, adminPassword, shellless, output);
+                output("Применяю защиту: создаю учётные записи, настраиваю запреты и фильтры…");
+                Process p = Protection.StartApply(cfg.Install, cfg.UsbMode, code, adminPassword, shellless, delegate (string l) { output(l); });
+                p.WaitForExit();
+                try { return p.ExitCode; } catch { return -1; }
             });
             DialogResult = DialogResult.OK;
             Close();
@@ -790,10 +805,12 @@ namespace SchoolShield
             string student = cfg.Install.StudentUser;
             Row(p, ref y, "Версия программы", AppInfo.VersionString + "  •  автор: " + Release.Author, true);
             Row(p, ref y, "Оболочка Windows", Protection.ShellRegistered() ? "лаунчер SchoolShield (включено)" : "обычный проводник (защита выключена)", Protection.ShellRegistered());
-            Row(p, ref y, "Учётная запись ученика", student + (Protection.StudentExists(student) ? " — создана" : " — не создана"), Protection.StudentExists(student));
+            bool studentThere = Protection.StudentExists(student);      // each lookup asks Windows: once is enough
+            Row(p, ref y, "Учётная запись ученика", student + (studentThere ? " — создана" : " — не создана"), studentThere);
             string winAdmin = cfg.Install.AdminUser;
-            Row(p, ref y, "Администратор Windows", winAdmin + (Protection.StudentExists(winAdmin) ? " — создана (вход: Ctrl+Alt+Del → Выйти → выбрать её)" : " — не создана: нажмите «Применить защиту заново…»"),
-                Protection.StudentExists(winAdmin));
+            bool adminThere = Protection.StudentExists(winAdmin);
+            Row(p, ref y, "Администратор Windows", winAdmin + (adminThere ? " — создана (вход: Ctrl+Alt+Del → Выйти → выбрать её)" : " — не создана: нажмите «Применить защиту заново…»"),
+                adminThere);
             Row(p, ref y, "Запрет установки и запуска (SRP)", Protection.SrpPresent() ? "включён" : "выключен", Protection.SrpPresent());
             List<PrereqItem> pre = Prerequisites.Check(AppInfo.InstallDir);
             List<string> missing = new List<string>();
