@@ -44,6 +44,7 @@ namespace SchoolShield
         private KeyboardHook hook;
         private Guard guard;
         private AiGuard ai;
+        private FileDialogProxy dialogProxy;
         private DockForm dock;
         private AdminConsoleForm console;
         private Native.RECT originalWorkArea;
@@ -344,6 +345,9 @@ namespace SchoolShield
             ai.OwnWindowHit += delegate { try { BeginInvoke(new Action(delegate { BlankBrowser(); ShowSection("home"); })); } catch { } };
             ai.Start();
 
+            dialogProxy = new FileDialogProxy(this);      // the launcher's own "Open" / "Save as" windows for a student
+            dialogProxy.Start();
+
             StartInputService();
             wifiTimer.Interval = 15000;
             wifiTimer.Tick += delegate
@@ -405,6 +409,7 @@ namespace SchoolShield
                 Cfg.AllowGames = fresh.AllowGames;
                 Cfg.GameExceptions = fresh.GameExceptions;
                 Cfg.UsbMode = fresh.UsbMode;
+                Cfg.OwnFileDialogs = fresh.OwnFileDialogs;
                 Cfg.AllowedExtensions = fresh.AllowedExtensions;
                 if (!State.Soft) UserPolicy.ApplyUsb(Cfg);        // the flash-drive mode takes effect at once
                 ReloadCatalog();                          // also after the administrator installed a program from the catalog
@@ -499,6 +504,7 @@ namespace SchoolShield
                 if (hook != null) hook.Dispose();
                 if (guard != null) guard.Dispose();
                 if (ai != null) ai.Dispose();
+                if (dialogProxy != null) dialogProxy.Dispose();
                 if (dock != null) dock.Dispose();
                 RestoreWorkArea();
             }

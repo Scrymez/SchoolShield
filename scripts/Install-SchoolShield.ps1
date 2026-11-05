@@ -19,6 +19,8 @@
 
 .PARAMETER AdminCode     Код администратора (если не указан - спросит; минимум 8 символов).
 .PARAMETER StudentUser   Имя учётной записи ученика (по умолчанию Student).
+.PARAMETER AdminUser     Имя отдельной учётной записи администратора Windows (по умолчанию SchoolAdmin). Создаётся при установке, если её нет.
+                       Пароль берётся из переменной SS_ADMIN_PASSWORD (в самом скрипте и в репозитории паролей нет); без неё запросит в консоли.
 .PARAMETER Dns           AdGuardFamily (по умолчанию: блокирует рекламу, взрослые сайты, включает SafeSearch) | YandexCloudflare | Yandex | Cloudflare | CleanBrowsing | None
 .PARAMETER WebMode       Filter (по умолчанию: интернет с фильтром) | Whitelist (только сайты из whitelist.txt)
 .PARAMETER Downloads     BlockAll (по умолчанию) | Dangerous | Off - скачивания в браузерах.
@@ -37,6 +39,7 @@
 param(
     [string]$AdminCode,
     [string]$StudentUser = 'Student',
+    [string]$AdminUser = 'SchoolAdmin',
     [ValidateSet('AdGuardFamily', 'YandexCloudflare', 'Yandex', 'Cloudflare', 'CleanBrowsing', 'None')][string]$Dns = 'AdGuardFamily',
     [ValidateSet('Filter', 'Whitelist')][string]$WebMode = 'Filter',
     [ValidateSet('BlockAll', 'Dangerous', 'Off')][string]$Downloads = 'BlockAll',
@@ -134,17 +137,9 @@ if ($edition -like 'Core*') {
     Write-Warn2 'но надёжнее Pro / Education / Enterprise. Установка продолжится.'
 }
 
-# Another admin must exist: the student account is a standard user and the launcher replaces the desktop.
-try {
-    $adminGroup = Get-LocalGroup -SID 'S-1-5-32-544'
-    $admins = @(Get-LocalGroupMember -Group $adminGroup.Name -ErrorAction Stop | Where-Object { $_.ObjectClass -eq 'User' })
-    Write-Host ('Администраторы этого ПК: ' + (($admins | ForEach-Object { $_.Name }) -join ', '))
-    $otherAdmins = @($admins | Where-Object { $_.Name -notlike "*\$StudentUser" })
-    if ($otherAdmins.Count -eq 0) { throw 'Нет ни одной учётной записи администратора, кроме ученика.' }
-} catch {
-    Write-Warn2 ('Не удалось проверить список администраторов: ' + $_.Exception.Message)
-}
-Write-Warn2 'Убедитесь, что у администратора Windows ЕСТЬ ПАРОЛЬ. Без него защита бессмысленна.'
+if ($StudentUser -ieq $AdminUser) { throw "Учётная запись администратора и ученика не могут называться одинаково ($AdminUser)." }
+if ($AdminUser -match '[\\/"\[\]:;|=,+*?<>@]' -or $StudentUser -match '[\\/"\[\]:;|=,+*?<>@]') { throw 'Недопустимые знаки в имени учётной записи.' }
+Write-Host ("Администратором Windows будет отдельная учётная запись $AdminUser (создаётся ниже); у ученика прав администратора нет.")
 
 # ---------------------------------------------------------------- 1. admin code
 
@@ -241,10 +236,55 @@ Write-Ok "Лаунчер: $InstallDir ; настройки и журнал: $Dat
 
 # ---------------------------------------------------------------- 3. student account
 
-Write-Step '3/9  Учётная запись ученика'
+Write-Step '3/9  Учётные записи: администратор Windows и ученик'
 if ($script:DryRun) {
-    Write-Dry "создать обычного пользователя $StudentUser без пароля, автовход"
+    Write-Dry "создать администратора $AdminUser (пароль из SS_ADMIN_PASSWORD) и обычного пользователя $StudentUser без пароля, автовход ученика"
 } else {
+    # 1) The administrator first: if this fails, nothing else has been changed yet and the computer cannot get locked.
+    $adminPlain = $env:SS_ADMIN_PASSWORD
+    $adminExists = [bool](Get-LocalUser -Name $AdminUser -ErrorAction SilentlyContinue)
+    if (-not $adminExists -and -not $adminPlain) {
+        if ($NonInteractive) { throw "Не задан пароль для новой учётной записи администратора $AdminUser (переменная SS_ADMIN_PASSWORD)." }
+        while ($true) {
+            $a1 = Read-Host "Придумайте пароль для администратора Windows ($AdminUser, минимум 8 символов)" -AsSecureString
+            $a2 = Read-Host 'Повторите пароль' -AsSecureString
+            $q1 = [Runtime.InteropServices.Marshal]::PtrToStringBSTR([Runtime.InteropServices.Marshal]::SecureStringToBSTR($a1))
+            $q2 = [Runtime.InteropServices.Marshal]::PtrToStringBSTR([Runtime.InteropServices.Marshal]::SecureStringToBSTR($a2))
+            if ($q1.Length -lt 8) { Write-Warn2 'Слишком короткий пароль.'; continue }
+            if ($q1 -ne $q2) { Write-Warn2 'Пароли не совпадают.'; continue }
+            $adminPlain = $q1
+            break
+        }
+    }
+    try {
+        if (-not $adminExists) {
+            $adminSecure = ConvertTo-SecureString $adminPlain -AsPlainText -Force
+            New-LocalUser -Name $AdminUser -Password $adminSecure -FullName 'Администратор школы' -Description 'SchoolShield: администратор Windows' `
+                -PasswordNeverExpires -AccountNeverExpires | Out-Null
+            Write-Ok "Создана учётная запись администратора $AdminUser."
+        } else {
+            Enable-LocalUser -Name $AdminUser -ErrorAction SilentlyContinue
+            if ($adminPlain) {
+                Set-LocalUser -Name $AdminUser -Password (ConvertTo-SecureString $adminPlain -AsPlainText -Force)
+                Write-Ok "У $AdminUser задан новый пароль."
+            } else { Write-Ok "Учётная запись администратора $AdminUser уже есть, пароль не менялся." }
+        }
+        $adminGroupName = (Get-LocalGroup -SID 'S-1-5-32-544').Name
+        if (-not (Get-LocalGroupMember -Group $adminGroupName -ErrorAction SilentlyContinue | Where-Object { $_.Name -like "*\$AdminUser" })) {
+            Add-LocalGroupMember -Group $adminGroupName -Member $AdminUser
+        }
+    } catch {
+        throw ("Не удалось создать или включить администратора $AdminUser, установка остановлена, чтобы не заблокировать компьютер: " + $_.Exception.Message +
+               ' (возможно, пароль не подходит под политику паролей Windows).')
+    }
+    # Safeguard: besides the student there must be an enabled local administrator, otherwise nobody could ever turn the protection off.
+    $goodAdmin = @(Get-LocalGroupMember -SID 'S-1-5-32-544' -ErrorAction SilentlyContinue | Where-Object {
+        $_.ObjectClass -eq 'User' -and $_.PrincipalSource -eq 'Local' -and $_.Name -notlike "*\$StudentUser" -and
+        (Get-LocalUser -Name ($_.Name.Split('\')[-1]) -ErrorAction SilentlyContinue).Enabled })
+    if ($goodAdmin.Count -eq 0) { throw 'Нет ни одной включённой учётной записи администратора, кроме ученика. Установка остановлена, чтобы не заблокировать компьютер.' }
+    Write-Host ('  Администраторы Windows: ' + (($goodAdmin | ForEach-Object { $_.Name }) -join ', ')) -ForegroundColor Green
+
+    # 2) The student: an ordinary user without a password.
     $usersGroup = Get-LocalGroup -SID 'S-1-5-32-545'
     if (-not (Get-LocalUser -Name $StudentUser -ErrorAction SilentlyContinue)) {
         New-LocalUser -Name $StudentUser -NoPassword -FullName 'Ученик' -Description 'SchoolShield: учётная запись ученика' `
@@ -597,7 +637,7 @@ if ($NoShell) {
     }
     Set-Reg $OwnKey 'InstallDir' $InstallDir 'String'
     Set-Reg $OwnKey 'StudentUser' $StudentUser 'String'
-    Set-Reg $OwnKey 'Version' '2.5.3' 'String'
+    Set-Reg $OwnKey 'Version' '2.6.0' 'String'
     Set-Reg $Winlogon 'Shell' ('"' + $exeInstalled + '"') 'String'
     Write-Ok 'Лаунчер зарегистрирован как оболочка. Администраторам он откроет обычный рабочий стол.'
 }

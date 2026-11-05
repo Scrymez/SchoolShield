@@ -142,6 +142,7 @@ namespace SchoolShield
         {
             StringBuilder sb = new StringBuilder("-NonInteractive");
             sb.Append(" -StudentUser ").Append(Quote(o.StudentUser));
+            sb.Append(" -AdminUser ").Append(Quote(string.IsNullOrEmpty(o.AdminUser) ? "SchoolAdmin" : o.AdminUser));
             sb.Append(" -Dns ").Append(o.Dns);
             sb.Append(" -WebMode ").Append(o.WebMode);
             sb.Append(" -Downloads ").Append(o.Downloads);
@@ -158,8 +159,19 @@ namespace SchoolShield
         /// <summary>Starts the Install script. adminCode may be null to keep the current code.</summary>
         public static Process StartApply(InstallOptions o, string usb, string adminCode, bool noShell, DataReceived output)
         {
+            return StartApply(o, usb, adminCode, null, noShell, output);
+        }
+
+        /// <summary>
+        /// Starts the Install script. <paramref name="adminPassword"/> is the Windows password of the separate administrator account; it travels
+        /// in the environment of the child process only (never on a command line) and is null to leave an existing account alone.
+        /// </summary>
+        public static Process StartApply(InstallOptions o, string usb, string adminCode, string adminPassword, bool noShell, DataReceived output)
+        {
             string args = ApplyArguments(o, usb) + (noShell ? " -NoShell" : "");
-            return Run(Powershell("Install-SchoolShield.ps1", args, adminCode), output);
+            ProcessStartInfo psi = Powershell("Install-SchoolShield.ps1", args, adminCode);
+            if (adminPassword != null) psi.EnvironmentVariables["SS_ADMIN_PASSWORD"] = adminPassword;
+            return Run(psi, output);
         }
 
         /// <summary>Teacher edition: DNS filter, browser policies, autostart of the guard. Nothing else is touched.</summary>

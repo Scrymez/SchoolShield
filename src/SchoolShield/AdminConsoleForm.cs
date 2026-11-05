@@ -122,6 +122,11 @@ namespace SchoolShield
                 prompt.Text = "admin@school:~$ ";
                 input.UseSystemPasswordChar = false;
                 Print("Доступ разрешён. Введите help для списка команд.");
+                Print("");
+                Print("Выйти в Windows:");
+                Print("  windows    рабочий стол Windows прямо сейчас (под этой учётной записью, админ-режим)");
+                Print("  admin      выйти и войти как администратор Windows (" + cfg.Install.AdminUser + "): полный доступ");
+                Print("  panel      панель администратора (Windows спросит пароль администратора)");
             }
             input.Clear();
             input.Focus();
@@ -201,6 +206,8 @@ namespace SchoolShield
                     case "?":
                         Print("  status            состояние защиты");
                         Print("  apps              список программ в лаунчере");
+                        Print("  windows           рабочий стол Windows прямо сейчас (то же, что explorer)");
+                        Print("  admin             выйти из сеанса и войти как администратор Windows (" + cfg.Install.AdminUser + ")");
                         Print("  explorer          открыть рабочий стол Windows (админ-режим)");
                         Print("  unlock [мин]      снять ограничения (клавиши, сворачивание, охрана) на N минут");
                         Print("  lock              вернуть защиту, закрыть рабочий стол");
@@ -250,8 +257,18 @@ namespace SchoolShield
 
                     case "explorer":
                     case "desktop":
+                    case "windows":
                         main.EnterDesktopMode();
                         Close();
+                        break;
+
+                    case "admin":
+                    case "switch":
+                        if (State.Preview) { Print("[preview] выход пропущен"); break; }
+                        Print("Выход из сеанса. На экране входа выберите учётную запись «" + cfg.Install.AdminUser + "» и введите её пароль:");
+                        Print("лаунчер откроет ей обычный рабочий стол Windows с правами администратора.");
+                        Log.Write("admin", "Выход для входа администратора Windows");
+                        main.ExitSession();
                         break;
 
                     case "sudo":
@@ -275,13 +292,7 @@ namespace SchoolShield
                         break;
 
                     case "panel":
-                        {
-                            ProcessStartInfo psi = new ProcessStartInfo(Application.ExecutablePath, "--admin");
-                            psi.UseShellExecute = true;
-                            psi.Verb = "runas";
-                            Process.Start(psi);
-                            Print("Откроется панель администратора (потребуется пароль администратора Windows).");
-                        }
+                        RunAs(Application.ExecutablePath, "--admin", "панель администратора");
                         break;
 
                     case "config":
@@ -295,13 +306,7 @@ namespace SchoolShield
                         break;
 
                     case "passwd":
-                        {
-                            ProcessStartInfo psi = new ProcessStartInfo(Application.ExecutablePath, "--set-code");
-                            psi.UseShellExecute = true;
-                            psi.Verb = "runas";
-                            Process.Start(psi);
-                            Print("Откроется окно смены кода (потребуется пароль администратора Windows).");
-                        }
+                        RunAs(Application.ExecutablePath, "--set-code", "окно смены кода");
                         break;
 
                     case "reload":
@@ -350,6 +355,19 @@ namespace SchoolShield
                 Log.Write("admin", "Команда '" + cmd + "': " + ex.Message);
             }
             Log.Write("admin", "Команда: " + cmd);
+        }
+
+        /// <summary>
+        /// Starts a program as the Windows administrator: Windows asks for the administrator's login and password. The prompt blocks the caller,
+        /// so it runs on a worker thread, and the launcher hides its own windows meanwhile so that the prompt cannot end up behind them.
+        /// </summary>
+        private void RunAs(string file, string args, string what)
+        {
+            Print("Запускаю: " + what + ". Windows запросит логин и пароль администратора (" + cfg.Install.AdminUser + "); окна лаунчера на это время скрыты.");
+            ElevationPrompt prompt = ElevationPrompt.BeginIfNeeded(delegate { Print(ElevationPrompt.NotShownHelp); });
+            Programs.RunElevatedAsync(file, args, false,
+                delegate (Process p) { BeginInvoke(new Action(delegate { ElevationPrompt.End(prompt); Print("Запущено: " + what + "."); })); },
+                delegate (string message) { BeginInvoke(new Action(delegate { ElevationPrompt.End(prompt); Print(message); })); });
         }
 
         private static void Elevated(string commandLine)

@@ -1258,6 +1258,15 @@ namespace SchoolShield
             root.Controls.Add(UiKit.Hint("SchoolShield " + AppInfo.VersionString + "  •  " + Release.Author));
             root.Controls.Add(UiKit.Hint("Параметры Windows и панель управления закрыты. Нужна помощь — обратитесь к учителю."));
 
+            if (Main.Cfg.AdminButton && !State.Windowed)
+            {
+                root.Controls.Add(UiKit.Heading("Для администратора"));
+                FlowLayoutPanel adm = UiKit.Flow();
+                adm.Controls.Add(UiKit.Flat("Вход администратора", delegate { Main.ShowAdminConsole(); }));
+                root.Controls.Add(adm);
+                root.Controls.Add(UiKit.Hint("Нужен код администратора."));
+            }
+
             if (Main.Cfg.AllowStudentShutdown || Main.Cfg.AllowStudentRestart)
             {
                 root.Controls.Add(UiKit.Heading("Питание"));

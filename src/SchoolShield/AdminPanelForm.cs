@@ -274,6 +274,9 @@ namespace SchoolShield
         private readonly TextBox code1 = new TextBox();
         private readonly TextBox code2 = new TextBox();
         private readonly TextBox student = new TextBox();
+        private readonly TextBox adminUser = new TextBox();
+        private readonly TextBox adminPass = new TextBox();
+        private readonly CheckBox samePass = new CheckBox();
         private readonly TextBox hotkey = new TextBox();
         private readonly ComboBox dns = new ComboBox();
         private readonly ComboBox web = new ComboBox();
@@ -295,14 +298,14 @@ namespace SchoolShield
             MaximizeBox = false;
             MinimizeBox = false;
             ShowInTaskbar = false;
-            ClientSize = new Size(640, 640);
+            ClientSize = new Size(640, 760);
             BackColor = Theme.Background;
             ForeColor = Theme.Text;
             Font = Theme.UiFont(10.5f);
 
             int y = 14;
             Label intro = new Label();
-            intro.Text = "Мастер настроит учётную запись ученика, запрет установки программ, фильтры сайтов и DNS, "
+            intro.Text = "Мастер создаст отдельные учётные записи администратора Windows и ученика, настроит запрет установки программ, фильтры сайтов и DNS, "
                 + "а затем сделает лаунчер оболочкой Windows. После этого перезагрузите компьютер.";
             intro.SetBounds(20, y, 600, 54);
             intro.ForeColor = Theme.Muted;
@@ -322,6 +325,25 @@ namespace SchoolShield
             code1.Enabled = code2.Enabled = !keepCode.Checked;
             Controls.Add(keepCode);
             y += keepCode.Visible ? 30 : 4;
+
+            AddLabel("Администратор Windows: имя учётной записи", y); AddLabel("Пароль (если не как код)", y, 330); y += 24;
+            adminUser.SetBounds(20, y, 290, 28); adminUser.Text = cfg.Install.AdminUser; Style(adminUser); Controls.Add(adminUser);
+            adminPass.SetBounds(330, y, 290, 28); adminPass.UseSystemPasswordChar = true; Style(adminPass); Controls.Add(adminPass);
+            y += 34;
+            samePass.Text = "Пароль администратора Windows такой же, как код администратора";
+            samePass.Checked = true;
+            samePass.AutoSize = true;
+            samePass.Location = new Point(20, y);
+            samePass.CheckedChanged += delegate { adminPass.Enabled = !samePass.Checked; };
+            adminPass.Enabled = false;
+            Controls.Add(samePass);
+            y += 30;
+            Label adminNote = new Label();
+            adminNote.Text = "Создаётся отдельно от ученика. Ей лаунчер открывает обычный рабочий стол Windows. Пароль нигде не хранится.";
+            adminNote.SetBounds(20, y, 600, 22);
+            adminNote.ForeColor = Theme.Muted;
+            Controls.Add(adminNote);
+            y += 32;
 
             AddLabel("Горячая клавиша админа (зажать на 1,5 секунды): нажмите комбинацию в поле", y); y += 24;
             hotkey.SetBounds(20, y, 600, 28);
@@ -439,10 +461,36 @@ namespace SchoolShield
                 MessageBox.Show(this, "Недопустимое имя учётной записи.", "Ученик");
                 return;
             }
+            string adminName = adminUser.Text.Trim();
+            if (adminName.Length == 0 || adminName.IndexOfAny(new char[] { '\\', '/', '"', '[', ']', ':', ';', '|', '=', ',', '+', '*', '?', '<', '>', '@' }) >= 0)
+            {
+                MessageBox.Show(this, "Недопустимое имя учётной записи администратора.", "Администратор Windows");
+                return;
+            }
+            if (string.Equals(adminName, name, StringComparison.OrdinalIgnoreCase))
+            {
+                MessageBox.Show(this, "Администратор Windows и ученик должны быть разными учётными записями.", "Администратор Windows");
+                return;
+            }
+            // The password is typed here and goes to the script through the environment only; it is never saved.
+            string adminPassword = null;
+            if (!samePass.Checked)
+            {
+                if (adminPass.Text.Length < 8) { MessageBox.Show(this, "Пароль администратора Windows слишком короткий: нужно минимум 8 символов.", "Администратор Windows"); return; }
+                adminPassword = adminPass.Text;
+            }
+            else if (!keepCode.Checked) adminPassword = code1.Text;
+            if (adminPassword == null && !Protection.StudentExists(adminName))
+            {
+                MessageBox.Show(this, "Для новой учётной записи администратора «" + adminName + "» нужен пароль: введите его в поле справа "
+                    + "или снимите «Оставить прежний код» и задайте код (он станет паролем).", "Администратор Windows");
+                return;
+            }
             try
             {
                 Protection.EnsureConfigFiles();
                 Config fresh = Config.Load();
+                fresh.Install.AdminUser = adminName;
                 fresh.AdminHotkey = hotkey.Text;
                 fresh.UsbMode = ((UsbModeItem)usb.SelectedItem).Value;
                 fresh.Install.StudentUser = name;
@@ -476,7 +524,7 @@ namespace SchoolShield
                     }
                     catch (Exception ex) { output("! Компоненты не установлены: " + ex.Message + " (можно повторить на вкладке «ИИ-фильтр»)"); }
                 }
-                return Protection.StartApply(cfg.Install, cfg.UsbMode, code, shellless, output);
+                return Protection.StartApply(cfg.Install, cfg.UsbMode, code, adminPassword, shellless, output);
             });
             DialogResult = DialogResult.OK;
             Close();
@@ -743,6 +791,9 @@ namespace SchoolShield
             Row(p, ref y, "Версия программы", AppInfo.VersionString + "  •  автор: " + Release.Author, true);
             Row(p, ref y, "Оболочка Windows", Protection.ShellRegistered() ? "лаунчер SchoolShield (включено)" : "обычный проводник (защита выключена)", Protection.ShellRegistered());
             Row(p, ref y, "Учётная запись ученика", student + (Protection.StudentExists(student) ? " — создана" : " — не создана"), Protection.StudentExists(student));
+            string winAdmin = cfg.Install.AdminUser;
+            Row(p, ref y, "Администратор Windows", winAdmin + (Protection.StudentExists(winAdmin) ? " — создана (вход: Ctrl+Alt+Del → Выйти → выбрать её)" : " — не создана: нажмите «Применить защиту заново…»"),
+                Protection.StudentExists(winAdmin));
             Row(p, ref y, "Запрет установки и запуска (SRP)", Protection.SrpPresent() ? "включён" : "выключен", Protection.SrpPresent());
             List<PrereqItem> pre = Prerequisites.Check(AppInfo.InstallDir);
             List<string> missing = new List<string>();
@@ -1496,6 +1547,7 @@ namespace SchoolShield
             CheckBox bBlur = Chk(p, "Размывать всю рекламу на сайтах (ученик не может отключить)", 0, y, cfg.Browser.AdBlur); y += 28;
             CheckBox bAds = Chk(p, "Блокировать рекламные сети (кроме YouTube, RuTube и VK Видео)", 0, y, cfg.Browser.BlockAdNetworks); y += 28;
             CheckBox bDl = Chk(p, "Разрешить скачивание файлов во встроенном браузере", 0, y, cfg.Browser.AllowDownloads); y += 28;
+            CheckBox ownDlg = Chk(p, "Свои окна «Открыть» и «Сохранить как» вместо стандартных (только нужные папки и учебные файлы)", 0, y, cfg.OwnFileDialogs); y += 28;
             CheckBox gesture = Chk(p, "Терминал админа открывается и по 7 быстрым нажатиям на часы", 0, y, cfg.AdminClickGesture); y += 40;
 
             Lbl(p, "Игры", 0, y, 300, true); y += 26;
@@ -1561,6 +1613,7 @@ namespace SchoolShield
                 cfg.Browser.AdBlur = bBlur.Checked;
                 cfg.Browser.BlockAdNetworks = bAds.Checked;
                 cfg.Browser.AllowDownloads = bDl.Checked;
+                cfg.OwnFileDialogs = ownDlg.Checked;
                 cfg.AdminClickGesture = gesture.Checked;
                 cfg.UsbMode = ((UsbModeItem)usbBox.SelectedItem).Value;
                 List<string> rejected = new List<string>();

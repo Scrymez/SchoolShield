@@ -90,6 +90,7 @@ namespace SchoolShield
     public class InstallOptions
     {
         public string StudentUser = "Student";
+        public string AdminUser = "SchoolAdmin";      // the separate Windows administrator account created at installation
         public string Dns = "AdGuardFamily";
         public string WebMode = "Filter";
         public string Downloads = "BlockAll";
@@ -176,6 +177,12 @@ namespace SchoolShield
 
         // Bumped when a new launcher section appears, so that older config.json files get it once (the administrator may switch it off later).
         public int SectionsVersion = 0;
+
+        // A small "Administrator login" button in the Computer section: a way to the admin terminal that needs no key combination (the code is still required).
+        public bool AdminButton = true;
+
+        // The launcher's own "Open" and "Save as" windows replace the standard ones of other programs for a student (see FileDialogProxy).
+        public bool OwnFileDialogs = true;
 
         public AiSettings Ai = new AiSettings();
         public BrowserSettings Browser = new BrowserSettings();
