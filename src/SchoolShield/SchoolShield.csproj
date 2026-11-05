@@ -10,7 +10,7 @@
     <PlatformTarget>x64</PlatformTarget>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <ApplicationIcon>..\..\assets\schoolshield.ico</ApplicationIcon>
-    <Version>2.5.2</Version>
+    <Version>2.5.3</Version>
     <Authors>Латипов С.А.</Authors>
     <Company>Латипов С.А.</Company>
     <Product>SchoolShield</Product>

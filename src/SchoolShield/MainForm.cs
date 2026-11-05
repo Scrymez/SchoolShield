@@ -789,10 +789,10 @@ namespace SchoolShield
                 {
                     if (MessageBox.Show(this, "Удалить приложение «" + app.Name + "» из Windows для всех пользователей?",
                         "Удаление", MessageBoxButtons.YesNo, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2) != DialogResult.Yes) return;
-                    if (!Programs.IsElevated()) Ui.Toast("Windows запросит права администратора: введите логин и пароль в появившемся окне (Alt+Tab, если его не видно).");
+                    ElevationPrompt prompt = ElevationPrompt.BeginIfNeeded(delegate { Ui.Toast(ElevationPrompt.NotShownHelp); });
                     Programs.UninstallStoreAppAsync(app,
-                        delegate (Process p) { WatchThenReload(p); },
-                        delegate (string message) { Ui.Toast(message); });
+                        delegate (Process p) { BeginInvoke(new Action(delegate { ElevationPrompt.End(prompt); })); WatchThenReload(p); },
+                        delegate (string message) { BeginInvoke(new Action(delegate { ElevationPrompt.End(prompt); Ui.Toast(message); })); });
                     return;
                 }
                 ShowUninstallDialog(app.Name);

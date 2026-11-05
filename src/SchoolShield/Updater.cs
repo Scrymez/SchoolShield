@@ -165,11 +165,13 @@ namespace SchoolShield
         /// <summary>Starts the installer on a worker thread (the administrator prompt blocks the caller) and keeps the window alive meanwhile.</summary>
         private void StartSetup(string path)
         {
+            // The launcher's own windows are hidden while Windows asks for the password, so that the request cannot be behind them.
+            ElevationPrompt prompt = ElevationPrompt.BeginIfNeeded(delegate { SetState(ElevationPrompt.NotShownHelp, true); });
             System.Windows.Forms.Timer reminder = new System.Windows.Forms.Timer();
             reminder.Interval = 20000;
             reminder.Tick += delegate
             {
-                SetState("Всё ещё жду ответа на запрос прав администратора. Он мог оказаться за другими окнами: нажмите Alt+Tab или посмотрите на панель задач.", false);
+                SetState("Всё ещё жду ответа на запрос прав администратора.", false);
                 reminder.Stop();
             };
             reminder.Start();
@@ -186,6 +188,7 @@ namespace SchoolShield
                 if (failure != null) Log.Write("update", failure);
                 UiPost(delegate
                 {
+                    ElevationPrompt.End(prompt);
                     reminder.Stop();
                     reminder.Dispose();
                     bar.Style = ProgressBarStyle.Continuous;
@@ -289,7 +292,7 @@ namespace SchoolShield
                         Form host = FindForm();
                         if (host != null) host.TopMost = false;
                         bar.Style = ProgressBarStyle.Marquee;
-                        SetState("Подпись проверена. Сейчас Windows запросит права администратора: введите логин и пароль в появившемся окне. Если окна не видно, нажмите Alt+Tab.", false);
+                        SetState("Подпись проверена. Сейчас Windows запросит права администратора: введите логин и пароль в появившемся окне.", false);
                         if (beforeInstall != null) beforeInstall();
                         StartSetup(path);
                     });

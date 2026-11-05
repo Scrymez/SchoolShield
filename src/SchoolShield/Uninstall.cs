@@ -404,12 +404,14 @@ namespace SchoolShield
             list.Enabled = false;
             SetHint(Programs.IsElevated()
                 ? "Удаляю «" + p.Name + "»… Если откроется окно программы удаления, следуйте ему."
-                : "Сейчас Windows запросит права администратора: введите логин и пароль в появившемся окне. Если окна не видно, нажмите Alt+Tab.", false);
+                : "Сейчас Windows запросит права администратора: введите логин и пароль в появившемся окне.", false);
             string name = p.Name, version = p.Version;
+            // Hide the launcher's windows while Windows asks, so that the request cannot be behind them.
+            ElevationPrompt prompt = ElevationPrompt.BeginIfNeeded(delegate { SetHint(ElevationPrompt.NotShownHelp, true); });
             Programs.UninstallAsync(p,
                 delegate (Process proc)
                 {
-                    Post(delegate { SetHint("Удаляю «" + name + "»… Если откроется окно программы удаления, следуйте ему.", false); });
+                    Post(delegate { ElevationPrompt.End(prompt); SetHint("Удаляю «" + name + "»… Если откроется окно программы удаления, следуйте ему.", false); });
                     if (proc != null) { try { proc.WaitForExit(); } catch { } }
                     List<InstalledProgram> now = Programs.Enumerate();
                     bool still = now.Exists(delegate (InstalledProgram x) { return x.Name == name && x.Version == version; });
@@ -425,7 +427,7 @@ namespace SchoolShield
                 },
                 delegate (string message)
                 {
-                    Post(delegate { list.Enabled = true; UpdateButtons(); SetHint(message, true); });
+                    Post(delegate { ElevationPrompt.End(prompt); list.Enabled = true; UpdateButtons(); SetHint(message, true); });
                 });
         }
 
