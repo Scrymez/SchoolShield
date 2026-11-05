@@ -138,13 +138,25 @@ namespace SchoolShield
             return chain.Build(cert) && cert.Subject.IndexOf("O=Microsoft Corporation", StringComparison.OrdinalIgnoreCase) >= 0;
         }
 
+        /// <summary>Writes "  40%" to the log each time the download passes the next ten percent.</summary>
+        private static Action<long, long> Percent(Action<string> log)
+        {
+            int last = -1;
+            return delegate (long done, long total)
+            {
+                if (total <= 0) return;
+                int p = (int)(done * 100 / total) / 10 * 10;
+                if (p != last) { last = p; log("  " + p + "%"); }
+            };
+        }
+
         private static bool RunInstaller(string url, string fileName, string args, Action<string> log, string what)
         {
             string path = Path.Combine(Path.GetTempPath(), fileName);
             try
             {
                 log("Скачиваю " + what + "…");
-                Downloader.DownloadFile(url, path, null);
+                Downloader.DownloadFile(url, path, Percent(log));
                 if (!IsSignedByMicrosoft(path)) throw new InvalidDataException("подпись файла не принадлежит Microsoft");
                 log("Устанавливаю " + what + "…");
                 ProcessStartInfo psi = new ProcessStartInfo(path, args);
@@ -152,7 +164,13 @@ namespace SchoolShield
                 psi.CreateNoWindow = true;
                 using (Process p = Process.Start(psi))
                 {
-                    p.WaitForExit();
+                    // The WebView2 bootstrapper downloads its runtime itself, which takes minutes on a slow school network: wait, but not for ever.
+                    if (!p.WaitForExit(20 * 60 * 1000))
+                    {
+                        try { p.Kill(); } catch { }
+                        log("! " + what + ": установщик не завершился за 20 минут и остановлен. Повторите позже (панель администратора → «ИИ-фильтр» → «Исправить»).");
+                        return false;
+                    }
                     // 0 = ok, 3010 = ok but reboot recommended, 1638 = a newer version is already installed
                     bool ok = p.ExitCode == 0 || p.ExitCode == 3010 || p.ExitCode == 1638;
                     log(what + ": код завершения " + p.ExitCode + (p.ExitCode == 3010 ? " (рекомендуется перезагрузка)" : "") + (ok ? "" : " — ошибка"));
@@ -184,7 +202,7 @@ namespace SchoolShield
                 try
                 {
                     log("Скачиваю модель ИИ-фильтра (" + (Release.ModelSize / 1024 / 1024) + " МБ)…");
-                    Downloader.InstallModel(null);
+                    Downloader.InstallModel(Percent(log));
                     log("Модель установлена.");
                 }
                 catch (Exception ex) { log("! Модель не скачана: " + ex.Message); }

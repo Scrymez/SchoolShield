@@ -136,6 +136,46 @@ namespace SchoolShield
             return Process.Start(psi);
         }
 
+        /// <summary>Is this process running with administrator rights (then Windows shows no consent window)?</summary>
+        public static bool IsElevated()
+        {
+            try { return new System.Security.Principal.WindowsPrincipal(System.Security.Principal.WindowsIdentity.GetCurrent()).IsInRole(System.Security.Principal.WindowsBuiltInRole.Administrator); }
+            catch { return false; }
+        }
+
+        /// <summary>
+        /// Starts an elevated process on a worker thread: the Windows consent window (in a student session: a request for the administrator's
+        /// login and password) blocks the caller until it is answered, and the interface must stay alive and readable meanwhile.
+        /// <paramref name="started"/> gets the process (may be null), <paramref name="failed"/> a message for the user. Both run on the worker thread.
+        /// </summary>
+        public static void RunElevatedAsync(string file, string args, bool hidden, Action<Process> started, Action<string> failed)
+        {
+            Thread t = new Thread(delegate ()
+            {
+                try { started(RunElevated(file, args, hidden)); }
+                catch (Win32Exception ex)
+                {
+                    Log.Write("uninstall", "Запуск от имени администратора: " + ex.Message + " (" + ex.NativeErrorCode + ")");
+                    failed(ex.NativeErrorCode == 1223 ? "Запрос прав администратора отклонён: ничего не запущено." : "Не удалось запустить: " + ex.Message);
+                }
+                catch (Exception ex)
+                {
+                    Log.Write("uninstall", "Запуск от имени администратора: " + ex.Message);
+                    failed("Не удалось запустить: " + ex.Message);
+                }
+            });
+            t.IsBackground = true;
+            t.Start();
+        }
+
+        public static void UninstallAsync(InstalledProgram p, Action<Process> started, Action<string> failed)
+        {
+            string file, args;
+            Split(p.Command, out file, out args);
+            Log.Write("uninstall", "Удаление «" + p.Name + "»: " + p.Command);
+            RunElevatedAsync(file, args, false, started, failed);
+        }
+
         /// <summary>Splits a registry command line into program and arguments (handles unquoted paths with spaces).</summary>
         public static void Split(string commandLine, out string file, out string args)
         {
@@ -170,8 +210,22 @@ namespace SchoolShield
             return RunElevated(file, args, false);
         }
 
+        public static void UninstallStoreAppAsync(AppEntry e, Action<Process> started, Action<string> failed)
+        {
+            string file, args;
+            StoreCommand(e, out file, out args);
+            RunElevatedAsync(file, args, true, started, failed);
+        }
+
         /// <summary>Removes a Store (UWP) package for all users, including the copy provisioned for new users.</summary>
         public static Process UninstallStoreApp(AppEntry e)
+        {
+            string file, args;
+            StoreCommand(e, out file, out args);
+            return RunElevated(file, args, true);
+        }
+
+        private static void StoreCommand(AppEntry e, out string file, out string args)
         {
             string aumid = e.ShellId;
             string fam = aumid.Substring(0, aumid.IndexOf('!'));
@@ -183,7 +237,8 @@ namespace SchoolShield
                 "Get-AppxProvisionedPackage -Online | Where-Object { $_.DisplayName -eq $name } | Remove-AppxProvisionedPackage -Online | Out-Null";
             string encoded = Convert.ToBase64String(Encoding.Unicode.GetBytes(script));
             Log.Write("uninstall", "Удаление Store-приложения «" + e.Name + "» (" + fam + ")");
-            return RunElevated("powershell.exe", "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -EncodedCommand " + encoded, true);
+            file = "powershell.exe";
+            args = "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -EncodedCommand " + encoded;
         }
     }
 
@@ -225,7 +280,7 @@ namespace SchoolShield
         private readonly TextBox filter = new TextBox();
         private readonly Button remove;
         private readonly Label hint = new Label();
-        private readonly List<InstalledProgram> all;
+        private List<InstalledProgram> all;
         private readonly Action done;
 
         public UninstallDialog(string preselect, Action onFinished)
@@ -343,17 +398,46 @@ namespace SchoolShield
             if (MessageBox.Show(this,
                 "Удалить «" + p.Name + "» с компьютера полностью?\nЭто нельзя отменить.",
                 "Удаление программы", MessageBoxButtons.YesNo, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2) != DialogResult.Yes) return;
-            try
-            {
-                Process proc = Programs.Uninstall(p);
-                Watch(proc);
-                MessageBox.Show(this, "Удаление запущено. Если откроется окно программы удаления, следуйте ему.", "Удаление");
-            }
-            catch (Win32Exception ex)
-            {
-                if (ex.NativeErrorCode != 1223) MessageBox.Show(this, "Не удалось запустить удаление: " + ex.Message, "Удаление");
-            }
-            catch (Exception ex) { MessageBox.Show(this, "Не удалось запустить удаление: " + ex.Message, "Удаление"); }
+            // Do not stay on top of the Windows consent window, and say what to expect.
+            TopMost = false;
+            remove.Enabled = false;
+            list.Enabled = false;
+            SetHint(Programs.IsElevated()
+                ? "Удаляю «" + p.Name + "»… Если откроется окно программы удаления, следуйте ему."
+                : "Сейчас Windows запросит права администратора: введите логин и пароль в появившемся окне. Если окна не видно, нажмите Alt+Tab.", false);
+            string name = p.Name, version = p.Version;
+            Programs.UninstallAsync(p,
+                delegate (Process proc)
+                {
+                    Post(delegate { SetHint("Удаляю «" + name + "»… Если откроется окно программы удаления, следуйте ему.", false); });
+                    if (proc != null) { try { proc.WaitForExit(); } catch { } }
+                    List<InstalledProgram> now = Programs.Enumerate();
+                    bool still = now.Exists(delegate (InstalledProgram x) { return x.Name == name && x.Version == version; });
+                    Post(delegate
+                    {
+                        all = now;
+                        list.Enabled = true;
+                        Fill(null);
+                        SetHint(still ? "«" + name + "» всё ещё в списке: удаление не завершено или отменено в окне программы."
+                            : "Готово: «" + name + "» удалена.", still);
+                        if (done != null) { try { done(); } catch { } }
+                    });
+                },
+                delegate (string message)
+                {
+                    Post(delegate { list.Enabled = true; UpdateButtons(); SetHint(message, true); });
+                });
+        }
+
+        private void Post(Action a)
+        {
+            try { BeginInvoke(a); } catch { }
+        }
+
+        private void SetHint(string text, bool error)
+        {
+            hint.Text = text;
+            hint.ForeColor = error ? Color.FromArgb(248, 113, 113) : Theme.Muted;
         }
 
         /// <summary>True when hosted by the elevated Admin panel (no need for the terminal's admin mode).</summary>

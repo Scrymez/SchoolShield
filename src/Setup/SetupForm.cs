@@ -13,7 +13,7 @@ namespace SchoolShield.Setup
         /// SchoolShield-Setup.exe             wizard (install or update)
         /// SchoolShield-Setup.exe /S          silent install  (/nomodel, /noicon, /edition=teacher|student, /noprotect)
         /// SchoolShield-Setup.exe /update     update (started by the program itself after a signed download)
-        /// SchoolShield-Setup.exe /uninstall  uninstall (/S for silent)
+        /// SchoolShield-Setup.exe /uninstall  uninstall (/S for silent; /auto without questions; /purge also settings and log; /removestudent also the student account)
         /// </summary>
         [STAThread]
         private static int Main(string[] args)
@@ -21,11 +21,14 @@ namespace SchoolShield.Setup
             bool silent = Has(args, "/S") || Has(args, "/silent");
             bool uninstall = Has(args, "/uninstall");
             bool update = Has(args, "/update");
+            bool auto = Has(args, "/auto");          // run without questions, with a progress window (the panel's self-destruct uses it)
+            bool purge = Has(args, "/purge");        // uninstall: delete settings, log and the AI model too
 
             Installer inst = new Installer();
-            inst.DownloadModel = !Has(args, "/nomodel");
+            inst.DownloadModel = !Has(args, "/nomodel") && !update;   // an update only replaces files; missing components are fetched by the admin panel
             inst.DesktopIcon = !Has(args, "/noicon");
             inst.ApplyTeacherProtection = !Has(args, "/noprotect");
+            inst.RemoveStudent = Has(args, "/removestudent");
             foreach (string a in args)
             {
                 if (a.StartsWith("/edition=", StringComparison.OrdinalIgnoreCase))
@@ -40,7 +43,7 @@ namespace SchoolShield.Setup
                 try
                 {
                     inst.Log = delegate (string m) { Console.WriteLine(m); };
-                    if (uninstall) inst.Uninstall(false);
+                    if (uninstall) inst.Uninstall(purge);
                     else inst.Install();
                     return 0;
                 }
@@ -53,7 +56,7 @@ namespace SchoolShield.Setup
 
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
-            Application.Run(new SetupForm(inst, uninstall, update));
+            Application.Run(new SetupForm(inst, uninstall, update, auto, purge));
             return 0;
         }
 
@@ -86,6 +89,9 @@ namespace SchoolShield.Setup
         private readonly CheckBox model = new CheckBox();
         private readonly CheckBox launch = new CheckBox();
         private readonly CheckBox keepSettings = new CheckBox();
+        private readonly CheckBox removeStudent = new CheckBox();
+        private readonly bool auto;
+        private readonly bool purge;
         private readonly RadioButton forStudents = new RadioButton();
         private readonly RadioButton forTeachers = new RadioButton();
         private readonly CheckBox protect = new CheckBox();
@@ -93,11 +99,13 @@ namespace SchoolShield.Setup
         private bool failed;
         private bool busy;
 
-        public SetupForm(Installer inst, bool uninstall, bool update)
+        public SetupForm(Installer inst, bool uninstall, bool update, bool auto, bool purge)
         {
             this.inst = inst;
             this.uninstall = uninstall;
             this.update = update;
+            this.auto = auto;
+            this.purge = purge;
 
             Text = uninstall ? "Удаление SchoolShield" : update ? "Обновление SchoolShield" : "Установка SchoolShield";
             StartPosition = FormStartPosition.CenterScreen;
@@ -136,7 +144,12 @@ namespace SchoolShield.Setup
             Controls.Add(cancel);
 
             action.Text = uninstall ? "Удалить" : update ? "Обновить" : "Установить";
-            if (update) Shown += delegate { OnAction(); };   // update runs without questions
+            if (update || auto)
+            {
+                // The update (or the panel's self-destruct) runs without questions, and its window must not hide behind the launcher.
+                TopMost = true;
+                Shown += delegate { Activate(); BringToFront(); OnAction(); };
+            }
         }
 
         private static void Style(Button b, bool accent)
@@ -162,11 +175,18 @@ namespace SchoolShield.Setup
             {
                 info.Text = "Будут сняты все ограничения, возвращён обычный рабочий стол Windows и удалена программа.";
                 keepSettings.Text = "Сохранить настройки и журнал (C:\\ProgramData\\SchoolShield)";
-                keepSettings.Checked = true;
+                keepSettings.Checked = !purge;
                 keepSettings.AutoSize = true;
                 keepSettings.Location = new Point(0, 160);
                 keepSettings.ForeColor = TextColor;
                 page1.Controls.Add(keepSettings);
+
+                removeStudent.Text = "Удалить также учётную запись ученика вместе с её файлами";
+                removeStudent.Checked = inst.RemoveStudent;
+                removeStudent.AutoSize = true;
+                removeStudent.Location = new Point(0, 192);
+                removeStudent.ForeColor = Color.FromArgb(251, 191, 36);
+                page1.Controls.Add(removeStudent);
             }
             else
             {
@@ -245,8 +265,20 @@ namespace SchoolShield.Setup
             page2.Controls.Add(log);
         }
 
+        private static void LogToFile(string text)
+        {
+            try
+            {
+                string dir = Path.Combine(Release.DataDir, "logs");
+                Directory.CreateDirectory(dir);
+                File.AppendAllText(Path.Combine(dir, "setup.log"), DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss") + "  " + text + Environment.NewLine);
+            }
+            catch { }
+        }
+
         private void Append(string text)
         {
+            LogToFile(text);
             if (IsDisposed) return;
             try
             {
@@ -273,7 +305,7 @@ namespace SchoolShield.Setup
             inst.ApplyTeacherProtection = protect.Checked || update;
             inst.DesktopIcon = icon.Checked || update;
             inst.StartMenuIcon = inst.DesktopIcon;
-            inst.DownloadModel = model.Checked || update;
+            inst.DownloadModel = model.Checked && !update;
             inst.Log = Append;
             inst.Progress = delegate (int p) { try { BeginInvoke(new Action(delegate { bar.Value = Math.Max(0, Math.Min(100, p)); })); } catch { } };
 
@@ -283,6 +315,7 @@ namespace SchoolShield.Setup
             action.Enabled = false;
             cancel.Enabled = false;
             bool removeSettings = uninstall && !keepSettings.Checked;
+            if (uninstall) inst.RemoveStudent = removeStudent.Checked;
 
             Thread t = new Thread(delegate ()
             {
@@ -302,11 +335,15 @@ namespace SchoolShield.Setup
                     {
                         busy = false;
                         done = true;
+                        TopMost = false;
                         action.Enabled = true;
                         action.Text = failed ? "Закрыть" : (!uninstall && !update && launch.Checked ? (inst.IsTeacher ? "Готово — открыть Центр" : "Готово — открыть мастер") : "Закрыть");
                         if (!failed) bar.Value = 100;
                         if (!failed && update)
+                        {
                             Append("Обновление установлено. Чтобы изменения вступили в силу на компьютерах учеников, перезагрузите их.");
+                            Append("Если не хватает Visual C++, WebView2 или модели ИИ, они докачаются, когда вы откроете панель администратора.");
+                        }
                     }));
                 }
                 catch { }

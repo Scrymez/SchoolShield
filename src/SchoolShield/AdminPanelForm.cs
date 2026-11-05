@@ -133,6 +133,117 @@ namespace SchoolShield
         }
     }
 
+    /// <summary>
+    /// "Self-destruct": removes SchoolShield from the computer completely. Confirmed by typing a word; the work is done by the installer
+    /// (SchoolShield-Setup.exe /uninstall /auto ...), which shows its own progress window. This panel closes itself afterwards.
+    /// </summary>
+    internal sealed class SelfDestructDialog : Form
+    {
+        private readonly CheckBox purge = new CheckBox();
+        private readonly CheckBox student = new CheckBox();
+        private readonly TextBox confirm = new TextBox();
+        private readonly Button go;
+        private const string Word = "УДАЛИТЬ";
+
+        public SelfDestructDialog(Config cfg)
+        {
+            Text = "Самоликвидация SchoolShield";
+            AutoScaleDimensions = new SizeF(96F, 96F);
+            AutoScaleMode = AutoScaleMode.Dpi;
+            StartPosition = FormStartPosition.CenterParent;
+            FormBorderStyle = FormBorderStyle.FixedDialog;
+            MaximizeBox = false;
+            MinimizeBox = false;
+            ShowInTaskbar = false;
+            ClientSize = new Size(680, 560);
+            BackColor = Theme.Background;
+            ForeColor = Theme.Text;
+            Font = Theme.UiFont(10.5f);
+
+            Label title = new Label();
+            title.Text = "Самоликвидация";
+            title.Font = Theme.UiFont(18, FontStyle.Bold);
+            title.ForeColor = Theme.Danger;
+            title.SetBounds(20, 14, 640, 40);
+            Controls.Add(title);
+
+            Label what = new Label();
+            what.Text = "SchoolShield будет полностью удалён с этого компьютера:\n"
+                + "•  вернётся обычный рабочий стол Windows, отключится автовход ученика;\n"
+                + "•  снимутся все ограничения: запрет установки, политики браузеров, DNS-фильтр, правила брандмауэра, запрет просмотра дисков;\n"
+                + "•  удалятся лаунчер, панель, ярлыки и запись в «Установке и удалении программ».\n\n"
+                + "Это нельзя отменить. Установить заново можно, скачав SchoolShield с GitHub. Чтобы Windows убрала файлы, занятые работающей программой, потом перезагрузите компьютер.";
+            what.SetBounds(20, 60, 640, 200);
+            Controls.Add(what);
+
+            purge.Text = "Удалить также настройки, журнал, списки и модель ИИ (C:\\ProgramData\\SchoolShield)";
+            purge.Checked = true;
+            purge.AutoSize = true;
+            purge.Location = new Point(20, 272);
+            Controls.Add(purge);
+
+            bool hasStudent = !cfg.IsTeacher() && Protection.StudentExists(cfg.Install.StudentUser);
+            student.Text = "Удалить также учётную запись «" + cfg.Install.StudentUser + "» вместе с её файлами и документами";
+            student.AutoSize = true;
+            student.Location = new Point(20, 304);
+            student.ForeColor = Color.FromArgb(251, 191, 36);
+            student.Enabled = hasStudent;
+            Controls.Add(student);
+            Label warn = new Label();
+            warn.Text = hasStudent ? "Файлы ученика удалятся безвозвратно. Если не уверены, оставьте галочку снятой." : "Учётной записи ученика на этом компьютере нет.";
+            warn.ForeColor = Theme.Muted;
+            warn.SetBounds(40, 330, 620, 24);
+            Controls.Add(warn);
+
+            Label ask = new Label();
+            ask.Text = "Для подтверждения введите слово " + Word + ":";
+            ask.SetBounds(20, 380, 640, 24);
+            Controls.Add(ask);
+
+            confirm.SetBounds(20, 410, 300, 28);
+            confirm.BackColor = Theme.Card;
+            confirm.ForeColor = Theme.Text;
+            confirm.BorderStyle = BorderStyle.FixedSingle;
+            confirm.TextChanged += delegate { go.Enabled = confirm.Text.Trim().ToUpperInvariant() == Word; };
+            Controls.Add(confirm);
+
+            go = UiKit.Flat("Самоликвидация", delegate { Run(cfg); });
+            go.AutoSize = false;
+            go.SetBounds(20, 470, 300, 44);
+            go.BackColor = Theme.Danger;
+            go.ForeColor = Color.White;
+            go.Enabled = false;
+            Controls.Add(go);
+
+            Button cancel = UiKit.Flat("Отмена", delegate { DialogResult = DialogResult.Cancel; Close(); });
+            cancel.AutoSize = false;
+            cancel.SetBounds(340, 470, 320, 44);
+            Controls.Add(cancel);
+            CancelButton = cancel;
+        }
+
+        private void Run(Config cfg)
+        {
+            string setup = System.IO.Path.Combine(AppInfo.InstallDir, "SchoolShield-Setup.exe");
+            if (!System.IO.File.Exists(setup))
+            {
+                MessageBox.Show(this, "Не найден " + setup + ".\nУдалите программу через «Параметры → Приложения» или «Установка и удаление программ».", "Самоликвидация");
+                return;
+            }
+            string args = "/uninstall /auto" + (purge.Checked ? " /purge" : "") + (student.Enabled && student.Checked ? " /removestudent" : "");
+            try
+            {
+                Log.Write("admin", "Самоликвидация: " + args);
+                System.Diagnostics.ProcessStartInfo psi = new System.Diagnostics.ProcessStartInfo(setup, args);
+                psi.UseShellExecute = true;       // this panel is elevated already, so the installer does not ask again
+                System.Diagnostics.Process.Start(psi);
+                DialogResult = DialogResult.OK;
+                Close();
+            }
+            catch (Exception ex) { MessageBox.Show(this, "Не удалось запустить удаление: " + ex.Message, "Самоликвидация"); }
+        }
+    }
+
     /// <summary>A flash-drive mode with its Russian name, for combo boxes.</summary>
     internal sealed class UsbModeItem
     {
@@ -666,7 +777,24 @@ namespace SchoolShield
             y += 56;
             Btn(p, cfg.AllowGames ? "Запретить игры" : "Разрешить игры", 0, y, 300, !cfg.AllowGames, delegate { ToggleGames(); });
             Lbl(p, "Тумблер действует сразу, без перезагрузки: лаунчер подхватывает его за несколько секунд.", 316, y + 8, 520, true);
+            y += 56;
+            SelfDestructButton(p, y);
             return p;
+        }
+
+        /// <summary>The red "Self-destruct" button at the bottom of the status page.</summary>
+        private void SelfDestructButton(Panel p, int y)
+        {
+            Button b = Btn(p, "Самоликвидация…", 0, y, 300, false, delegate
+            {
+                using (SelfDestructDialog d = new SelfDestructDialog(cfg))
+                {
+                    if (d.ShowDialog(this) == DialogResult.OK) Application.Exit();   // the installer deletes the folder we run from: close first
+                }
+            });
+            b.BackColor = Theme.Danger;
+            b.ForeColor = Color.White;
+            Lbl(p, "Полное удаление SchoolShield с этого компьютера: защита снимается, рабочий стол возвращается. Нужно подтверждение.", 316, y + 8, 520, true);
         }
 
         /// <summary>The "Games" switch: allow or forbid mini-games on sites, game launchers and game programs.</summary>
@@ -933,6 +1061,8 @@ namespace SchoolShield
                 try { Process.Start("explorer.exe", "\"" + AppInfo.ExePath + "\""); }   // explorer starts it without administrator rights
                 catch (Exception ex) { MessageBox.Show(this, ex.Message); }
             });
+            y += 56;
+            SelfDestructButton(p, y);
             return p;
         }
 

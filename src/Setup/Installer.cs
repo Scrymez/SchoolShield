@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.IO.Compression;
+using System.Text;
 using System.Reflection;
 using System.Runtime.InteropServices;
 using Microsoft.Win32;
@@ -27,6 +28,8 @@ namespace SchoolShield.Setup
         /// <summary>"student", "teacher" or null = keep what the computer already has (updates never change the edition).</summary>
         public string Edition;
         public bool ApplyTeacherProtection = true;
+        /// <summary>Uninstall also deletes the student's Windows account together with its profile (off by default).</summary>
+        public bool RemoveStudent;
 
         public static string Version
         {
@@ -362,6 +365,39 @@ namespace SchoolShield.Setup
             }
         }
 
+        // ------------------------------------------------------------------ leftovers
+
+        private const int MoveFileDelayUntilReboot = 4;
+
+        /// <summary>Deletes a folder as far as possible. Returns how many files were locked and handed to Windows for deletion at the next start.</summary>
+        private int RemoveFolder(string dir)
+        {
+            if (!Directory.Exists(dir)) return 0;
+            int scheduled = 0;
+            try
+            {
+                foreach (string file in Directory.GetFiles(dir, "*", SearchOption.AllDirectories))
+                {
+                    try { File.SetAttributes(file, FileAttributes.Normal); File.Delete(file); }
+                    catch
+                    {
+                        if (MoveFileEx(file, null, MoveFileDelayUntilReboot)) scheduled++;
+                    }
+                }
+                // Folders go deepest first; a folder that is not empty yet is deleted by Windows after its files, in the same order.
+                List<string> dirs = new List<string>(Directory.GetDirectories(dir, "*", SearchOption.AllDirectories));
+                dirs.Sort(delegate (string a, string b) { return b.Length.CompareTo(a.Length); });
+                dirs.Add(dir);
+                foreach (string d in dirs)
+                {
+                    try { Directory.Delete(d, false); }
+                    catch { MoveFileEx(d, null, MoveFileDelayUntilReboot); }
+                }
+            }
+            catch (Exception ex) { Log("! Уборка " + dir + ": " + ex.Message); }
+            return scheduled;
+        }
+
         // ------------------------------------------------------------------ uninstall
 
         public void Uninstall(bool removeSettings)
@@ -370,7 +406,7 @@ namespace SchoolShield.Setup
             string script = Path.Combine(InstallDir, "scripts", "Uninstall-SchoolShield.ps1");
             if (File.Exists(script))
             {
-                string args = "-NoProfile -ExecutionPolicy Bypass -File \"" + script + "\" -KeepProgram" + (removeSettings ? "" : " -KeepData");
+                string args = "-NoProfile -ExecutionPolicy Bypass -File \"" + script + "\" -KeepProgram" + (removeSettings ? "" : " -KeepData") + (RemoveStudent ? " -RemoveStudent" : "");
                 ProcessStartInfo psi = new ProcessStartInfo("powershell.exe", args);
                 psi.UseShellExecute = false;
                 psi.CreateNoWindow = true;
@@ -388,13 +424,26 @@ namespace SchoolShield.Setup
             try { File.Delete(TeacherDesktopLink); } catch { }
             try { if (Directory.Exists(MenuDir)) Directory.Delete(MenuDir, true); } catch { }
             try { Registry.LocalMachine.DeleteSubKeyTree(UninstallKey, false); } catch { }
+            try { Registry.LocalMachine.DeleteSubKeyTree(@"SOFTWARE\SchoolShield", false); } catch { }
+            try { string upd = Path.Combine(Path.GetTempPath(), "SchoolShield-update"); if (Directory.Exists(upd)) Directory.Delete(upd, true); } catch { }
 
-            // This very file lives in InstallDir: delete the folder from a helper once we have exited.
-            ProcessStartInfo del = new ProcessStartInfo("cmd.exe", "/c ping 127.0.0.1 -n 4 >nul & rd /s /q \"" + InstallDir + "\"");
+            // Delete the folders now; whatever a running program still holds (the launcher of a logged-in student, this very Setup) is deleted
+            // by Windows at the next start, and a helper retries once we have exited.
+            List<string> folders = new List<string>();
+            folders.Add(InstallDir);
+            if (removeSettings) folders.Add(Release.DataDir);
+            int leftovers = 0;
+            foreach (string f in folders) leftovers += RemoveFolder(f);
+
+            StringBuilder helper = new StringBuilder("/c ping 127.0.0.1 -n 4 >nul");
+            foreach (string f in folders) helper.Append(" & rd /s /q \"").Append(f).Append('"');
+            ProcessStartInfo del = new ProcessStartInfo("cmd.exe", helper.ToString());
             del.CreateNoWindow = true;
             del.UseShellExecute = false;
             Process.Start(del);
-            Log("Готово. Программа удалена; рабочий стол Windows восстановлен.");
+            Log(leftovers == 0
+                ? "Готово. Программа удалена; рабочий стол Windows восстановлен."
+                : "Готово. Программа удалена; рабочий стол Windows восстановлен. Файлов, занятых работающей программой: " + leftovers + ". Их уберёт Windows при следующем запуске: перезагрузите компьютер.");
         }
     }
 }

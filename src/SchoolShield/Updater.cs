@@ -94,11 +94,17 @@ namespace SchoolShield
             return setup;
         }
 
+        /// <summary>
+        /// Starts the installer. It needs administrator rights, so Windows shows its consent window (a student session is asked for the
+        /// administrator's login and password); this call returns only after the answer. Run it off the UI thread.
+        /// </summary>
         public static void LaunchSetup(string setupPath)
         {
             ProcessStartInfo psi = new ProcessStartInfo(setupPath, "/update");
             psi.UseShellExecute = true;   // the installer asks for administrator rights itself
-            Process.Start(psi);
+            Log.Write("update", "Запускаю установщик: " + setupPath);
+            using (Process p = Process.Start(psi))
+                Log.Write("update", "Установщик запущен" + (p == null ? "" : " (pid " + p.Id + ")"));
         }
     }
 
@@ -154,6 +160,50 @@ namespace SchoolShield
             notes.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right | AnchorStyles.Bottom;
 
             Controls.AddRange(new Control[] { current, check, install, state, bar, notes });
+        }
+
+        /// <summary>Starts the installer on a worker thread (the administrator prompt blocks the caller) and keeps the window alive meanwhile.</summary>
+        private void StartSetup(string path)
+        {
+            System.Windows.Forms.Timer reminder = new System.Windows.Forms.Timer();
+            reminder.Interval = 20000;
+            reminder.Tick += delegate
+            {
+                SetState("Всё ещё жду ответа на запрос прав администратора. Он мог оказаться за другими окнами: нажмите Alt+Tab или посмотрите на панель задач.", false);
+                reminder.Stop();
+            };
+            reminder.Start();
+
+            Thread launch = new Thread(delegate ()
+            {
+                string failure = null;
+                try { Updater.LaunchSetup(path); }
+                catch (System.ComponentModel.Win32Exception ex)
+                {
+                    failure = ex.NativeErrorCode == 1223 ? "Запрос прав администратора отклонён. Нажмите «Скачать и установить» ещё раз и введите пароль администратора." : "Не удалось запустить установщик: " + ex.Message;
+                }
+                catch (Exception ex) { failure = "Не удалось запустить установщик: " + ex.Message; }
+                if (failure != null) Log.Write("update", failure);
+                UiPost(delegate
+                {
+                    reminder.Stop();
+                    reminder.Dispose();
+                    bar.Style = ProgressBarStyle.Continuous;
+                    if (failure != null)
+                    {
+                        SetState(failure, true);
+                        bar.Visible = false;
+                        check.Enabled = true;
+                        install.Enabled = true;
+                        return;
+                    }
+                    if (exitAfterLaunch) { Application.Exit(); return; }
+                    SetState("Установщик запущен: его окно покажет ход установки (обычно до минуты). Когда он напишет «Обновление установлено», перезагрузите компьютер.", false);
+                    bar.Visible = false;
+                });
+            });
+            launch.IsBackground = true;
+            launch.Start();
         }
 
         private void SetState(string text, bool error)
@@ -225,15 +275,13 @@ namespace SchoolShield
                     });
                     UiPost(delegate
                     {
-                        SetState("Подпись проверена. Запускаю установку…", false);
+                        // Windows is about to ask for administrator rights. Do not stay on top of its window, and say what to do.
+                        Form host = FindForm();
+                        if (host != null) host.TopMost = false;
+                        bar.Style = ProgressBarStyle.Marquee;
+                        SetState("Подпись проверена. Сейчас Windows запросит права администратора: введите логин и пароль в появившемся окне. Если окна не видно, нажмите Alt+Tab.", false);
                         if (beforeInstall != null) beforeInstall();
-                        Updater.LaunchSetup(path);
-                        if (exitAfterLaunch) Application.Exit();
-                        else
-                        {
-                            SetState("Установщик запущен (потребуется пароль администратора Windows). После установки перезагрузите компьютер.", false);
-                            bar.Visible = false;
-                        }
+                        StartSetup(path);
                     });
                 }
                 catch (Exception ex)
