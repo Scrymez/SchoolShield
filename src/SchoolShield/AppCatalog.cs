@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Drawing;
+using System.IO;
 using System.Runtime.InteropServices;
 
 namespace SchoolShield
@@ -34,6 +35,7 @@ namespace SchoolShield
                 dynamic folder = shell.NameSpace("shell:AppsFolder");
                 dynamic items = folder.Items();
                 int count = items.Count;
+                Log.Write("catalog", "Shell AppsFolder: записей " + count);
                 for (int i = 0; i < count; i++)
                 {
                     try
@@ -58,6 +60,14 @@ namespace SchoolShield
                 Log.Write("catalog", "Не удалось прочитать список программ: " + ex.Message);
             }
 
+            // Without Explorer (the launcher is the Windows shell) or in a profile that has just been created, the shell may return an empty
+            // "apps" folder. The shortcuts of the Start menu are plain files, so read them directly.
+            if (list.Count == 0)
+            {
+                try { AddStartMenu(cfg, list, names); }
+                catch (Exception ex) { Log.Write("catalog", "Ярлыки меню «Пуск» не прочитаны: " + ex.Message); }
+            }
+
             foreach (CustomApp c in cfg.CustomApps)
             {
                 if (c == null || string.IsNullOrEmpty(c.Name) || string.IsNullOrEmpty(c.Path)) continue;
@@ -73,6 +83,66 @@ namespace SchoolShield
             list.Sort(delegate (AppEntry a, AppEntry b) { return string.Compare(a.Name, b.Name, StringComparison.CurrentCultureIgnoreCase); });
             Log.Write("catalog", "Программ в лаунчере: " + list.Count);
             return list;
+        }
+
+        private static readonly System.Text.RegularExpressions.Regex Junk = new System.Text.RegularExpressions.Regex(
+            @"uninstall|удал|readme|прочти|справк|help|licen|лиценз|document|документац|website|веб-?сайт|на сайт|release notes|о программе|about ",
+            System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.CultureInvariant);
+
+        private static readonly string[] NotPrograms = new string[] { ".chm", ".txt", ".pdf", ".htm", ".html", ".url", ".rtf", ".md", ".log" };
+
+        /// <summary>Shortcuts of the Start menu (all users and the current user), straight from the file system.</summary>
+        private static void AddStartMenu(Config cfg, List<AppEntry> list, HashSet<string> names)
+        {
+            List<string> roots = new List<string>();
+            try { roots.Add(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonStartMenu), "Programs")); } catch { }
+            try { roots.Add(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.StartMenu), "Programs")); } catch { }
+
+            dynamic wsh = null;
+            try { wsh = Activator.CreateInstance(Type.GetTypeFromProgID("WScript.Shell")); } catch { }
+
+            int found = 0;
+            foreach (string root in roots)
+            {
+                if (!Directory.Exists(root)) continue;
+                List<string> files = new List<string>();
+                ScanLinks(root, 0, files);
+                foreach (string f in files)
+                {
+                    try
+                    {
+                        string name = Path.GetFileNameWithoutExtension(f);
+                        if (string.IsNullOrEmpty(name) || Junk.IsMatch(name)) continue;
+                        if (!IsVisible(cfg, name)) continue;
+                        if (names.Contains(name)) continue;
+                        if (wsh != null)
+                        {
+                            string target = null;
+                            try { target = wsh.CreateShortcut(f).TargetPath; } catch { }
+                            if (!string.IsNullOrEmpty(target) && Array.IndexOf(NotPrograms, Path.GetExtension(target).ToLowerInvariant()) >= 0) continue;
+                            if (!string.IsNullOrEmpty(target) && Directory.Exists(target)) continue;
+                        }
+                        names.Add(name);
+                        AppEntry e = new AppEntry();
+                        e.Name = name;
+                        e.Path = f;
+                        e.Category = Classify(cfg, name);
+                        list.Add(e);
+                        found++;
+                    }
+                    catch { }
+                }
+            }
+            Log.Write("catalog", "Ярлыки меню «Пуск»: добавлено " + found);
+        }
+
+        private static void ScanLinks(string dir, int depth, List<string> files)
+        {
+            try { files.AddRange(Directory.GetFiles(dir, "*.lnk")); } catch { }
+            if (depth >= 4) return;
+            string[] subs;
+            try { subs = Directory.GetDirectories(dir); } catch { return; }
+            foreach (string d in subs) ScanLinks(d, depth + 1, files);
         }
 
         /// <summary>Everything installed, ignoring the hide-list (used by the Admin panel to edit it).</summary>
@@ -163,7 +233,7 @@ namespace SchoolShield
                 else
                     psi = new ProcessStartInfo(e.Path, e.Args ?? "");
                 psi.UseShellExecute = true;
-                if (e.Path != null)
+                if (e.Path != null && !e.Path.EndsWith(".lnk", StringComparison.OrdinalIgnoreCase))
                 {
                     try { psi.WorkingDirectory = System.IO.Path.GetDirectoryName(e.Path); } catch { }
                 }

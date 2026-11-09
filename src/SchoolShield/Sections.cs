@@ -337,7 +337,9 @@ namespace SchoolShield
             }
             grid.ResumeLayout();
             empty.Visible = visible == 0;
-            empty.Text = Main.Apps.Count == 0 ? "Программы загружаются…" : "Ничего не найдено.";
+            empty.Text = Main.Apps.Count == 0
+                ? (Main.CatalogLoaded ? "Программ пока нет. Если они должны быть, скажите администратору: он добавит их в панели («Программы»)." : "Программы загружаются…")
+                : "Ничего не найдено.";
         }
 
         public void RefreshIcons() { foreach (TileControl t in tiles) t.Invalidate(); }

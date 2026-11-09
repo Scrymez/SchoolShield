@@ -512,25 +512,37 @@ namespace SchoolShield
             t.Start();
         }
 
+        /// <summary>True once the first scan of the installed programs has finished (an empty list is then really empty).</summary>
+        public bool CatalogLoaded;
+
         private void CatalogThread()
         {
             List<AppEntry> list;
-            try { list = AppCatalog.Load(Cfg); }
-            catch (Exception ex)
+            // An empty result right after sign-in is common (the profile is still being prepared): look again a few times.
+            for (int attempt = 0; ; attempt++)
             {
-                Log.Write("catalog", ex.Message);
-                list = new List<AppEntry>();
-            }
-
-            try
-            {
-                BeginInvoke(new Action(delegate
+                try { list = AppCatalog.Load(Cfg); }
+                catch (Exception ex)
                 {
-                    Apps = list;
-                    foreach (Section s in sections.Values) s.OnAppsChanged();
-                }));
+                    Log.Write("catalog", ex.Message);
+                    list = new List<AppEntry>();
+                }
+
+                List<AppEntry> shown = list;
+                try
+                {
+                    BeginInvoke(new Action(delegate
+                    {
+                        Apps = shown;
+                        CatalogLoaded = true;
+                        foreach (Section s in sections.Values) s.OnAppsChanged();
+                    }));
+                }
+                catch { return; }
+
+                if (list.Count > 0 || attempt >= 3) break;
+                Thread.Sleep(attempt == 0 ? 4000 : 12000);
             }
-            catch { return; }
 
             int n = 0;
             foreach (AppEntry entry in list)
