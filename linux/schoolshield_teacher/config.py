@@ -102,7 +102,7 @@ def save(cfg):
 
 # ----------------------------------------------------------------------------- настройки пользователя
 
-PREF_DEFAULTS = {"theme": "dark", "favorites": [], "sections": ["home", "apps", "docs", "media", "files", "web", "system", "protect"]}
+PREF_DEFAULTS = {"theme": "light", "size": "large", "favorites": [], "sections": ["home", "files", "docs", "media", "apps", "net", "settings", "help", "protect"]}
 
 
 def load_prefs():
@@ -111,7 +111,8 @@ def load_prefs():
 
 def save_prefs(prefs):
     clean = _merge(PREF_DEFAULTS, {
-        "theme": "light" if prefs.get("theme") == "light" else "dark",
+        "theme": "dark" if prefs.get("theme") == "dark" else "light",
+        "size": prefs.get("size") if prefs.get("size") in ("normal", "large", "huge") else "large",
         "favorites": [str(x) for x in prefs.get("favorites", [])][:200],
     })
     d = paths.user_config_dir()

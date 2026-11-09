@@ -570,7 +570,7 @@ namespace SchoolShield
         public AdminPanelForm(Config cfg)
         {
             this.cfg = cfg;
-            Motion.Configure(cfg.Animations);
+            Motion.ConfigureFrom(cfg);
             Ui.Sarcastic = cfg.SarcasticMessages;
             Text = "SchoolShield — панель администратора";
             Fx.FadeIn(this, 240);
@@ -1083,7 +1083,7 @@ namespace SchoolShield
                 banner.SetBounds(0, y, 820, 40);
                 banner.TextAlign = ContentAlignment.MiddleLeft;
                 banner.BackColor = Theme.Accent;
-                banner.ForeColor = Theme.Dark ? Color.FromArgb(7, 12, 24) : Color.White;
+                banner.ForeColor = Theme.OnAccent;
                 banner.Font = Theme.UiFont(11, FontStyle.Bold);
                 p.Controls.Add(banner);
                 y += 56;
@@ -1661,7 +1661,7 @@ namespace SchoolShield
                 cfg.Animations = anim.Checked;
                 cfg.SarcasticMessages = joke.Checked;
                 cfg.Intro = intro.Checked;
-                Motion.Configure(cfg.Animations);
+                Motion.ConfigureFrom(cfg);
                 Ui.Sarcastic = cfg.SarcasticMessages;
                 cfg.UsbMode = ((UsbModeItem)usbBox.SelectedItem).Value;
                 List<string> rejected = new List<string>();

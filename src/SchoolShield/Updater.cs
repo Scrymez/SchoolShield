@@ -240,7 +240,7 @@ namespace SchoolShield
                             SetState("Доступна версия " + info.Tag + " (" + FileIndex.Size(info.Size) + ").", false);
                             install.Enabled = true;
                             install.BackColor = Theme.Accent;
-                            install.ForeColor = Theme.Dark ? Color.FromArgb(7, 12, 24) : Color.White;
+                            install.ForeColor = Theme.OnAccent;
                         }
                         else SetState("У вас последняя версия (" + info.Tag + ").", false);
                         notes.Text = (info.Notes ?? "").Replace("\r\n", "\n").Replace("\n", Environment.NewLine);

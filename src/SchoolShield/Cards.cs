@@ -496,7 +496,7 @@ namespace SchoolShield
             ShowInTaskbar = false;
             TopMost = true;
             StartPosition = FormStartPosition.Manual;
-            BackColor = Color.FromArgb(7, 12, 24);
+            BackColor = Color.FromArgb(14, 11, 34);
             Size = new Size(Metrics.S(380), Metrics.S(84));
             SetStyle(ControlStyles.OptimizedDoubleBuffer | ControlStyles.AllPaintingInWmPaint | ControlStyles.UserPaint, true);
             Rectangle s = Screen.PrimaryScreen.Bounds;
@@ -541,16 +541,16 @@ namespace SchoolShield
             Graphics g = e.Graphics;
             Fx.Quality(g);
             Rectangle full = new Rectangle(0, 0, Width, Height);
-            using (LinearGradientBrush b = Fx.Gradient(full, Color.FromArgb(19, 30, 56), Color.FromArgb(8, 13, 26), 90f))
+            using (LinearGradientBrush b = Fx.Gradient(full, Color.FromArgb(43, 35, 96), Color.FromArgb(14, 11, 34), 90f))
                 g.FillRectangle(b, full);
-            Fx.StrokeRound(g, Color.FromArgb(120, 56, 189, 248), 2f, new RectangleF(1, 1, Width - 2, Height - 2), Metrics.S(20));
+            Fx.StrokeRound(g, Color.FromArgb(150, 192, 132, 252), 2f, new RectangleF(1, 1, Width - 2, Height - 2), Metrics.S(20));
 
             float d = Metrics.S(52);
             RectangleF ring = new RectangleF(Metrics.S(20), (Height - d) / 2, d, d);
-            using (Pen back = new Pen(Color.FromArgb(40, 56, 189, 248), Metrics.S(6))) g.DrawEllipse(back, ring);
+            using (Pen back = new Pen(Color.FromArgb(50, 192, 132, 252), Metrics.S(6))) g.DrawEllipse(back, ring);
             double v = Math.Max(0, Math.Min(1, shown.Value));
             if (v > 0.002)
-                using (Pen fill = new Pen(Color.FromArgb(34, 211, 238), Metrics.S(6)))
+                using (Pen fill = new Pen(Color.FromArgb(192, 132, 252), Metrics.S(6)))
                 {
                     fill.StartCap = LineCap.Round;
                     fill.EndCap = LineCap.Round;

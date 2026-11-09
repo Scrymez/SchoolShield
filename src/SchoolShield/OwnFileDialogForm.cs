@@ -202,7 +202,7 @@ namespace SchoolShield
             using (SolidBrush bg = new SolidBrush(sel ? Theme.Accent : Theme.Sidebar))
                 e.Graphics.FillRectangle(bg, e.Bounds);
             string text = r.Name.Split(new string[] { "  —  " }, StringSplitOptions.None)[0] + (r.ReadOnly ? "  (чтение)" : "");
-            using (SolidBrush fg = new SolidBrush(sel ? (Theme.Dark ? Color.FromArgb(7, 12, 24) : Color.White) : Theme.Text))
+            using (SolidBrush fg = new SolidBrush(sel ? Theme.OnAccent : Theme.Text))
                 e.Graphics.DrawString(text, Font, fg, e.Bounds.X + 8, e.Bounds.Y + (e.Bounds.Height - Font.Height) / 2);
         }
 

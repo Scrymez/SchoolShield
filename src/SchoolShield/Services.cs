@@ -18,7 +18,10 @@ namespace SchoolShield
         public List<string> Favorites = new List<string>();
         public List<string> RecentApps = new List<string>();
         public List<string> RecentFiles = new List<string>();
-        public string Theme = "dark";
+        /// <summary>"dark", "light" or "" (not chosen yet: dark for students, light for teachers).</summary>
+        public string Theme = "";
+        /// <summary>Text size of the teacher's centre: "normal", "large" or "huge". Empty = large for teachers.</summary>
+        public string TextSize = "";
 
         private static string FilePath
         {

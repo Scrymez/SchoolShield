@@ -134,3 +134,17 @@ def uname():
         return os.uname().nodename
     except AttributeError:
         return ""
+
+
+def network_summary():
+    """Что подключено сейчас: имя Wi-Fi, проводная сеть. Быстро (без поиска сетей)."""
+    wifi, wired = None, False
+    code, out = _out(["nmcli", "-t", "-f", "NAME,TYPE", "connection", "show", "--active"], 6)
+    if code == 0:
+        for line in out.splitlines():
+            f = _split_nmcli(line)
+            if len(f) >= 2 and f[1] in ("802-11-wireless", "wifi"):
+                wifi = f[0]
+            if len(f) >= 2 and f[1] in ("802-3-ethernet", "ethernet"):
+                wired = True
+    return {"wifi": wifi, "wired": wired}

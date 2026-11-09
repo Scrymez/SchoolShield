@@ -18,7 +18,7 @@ import time
 import urllib.parse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-from . import apply as apply_mod, apps, config, guard, paths, system, updater, aiscan, VERSION, AUTHOR, SITE_URL
+from . import apply as apply_mod, apps, config, devices, fileops, guard, paths, system, updater, aiscan, VERSION, AUTHOR, SITE_URL
 
 UI_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "ui")
 PKEXEC_BIN = "/usr/bin/schoolshield-teacher"
@@ -34,6 +34,7 @@ class Center(object):
         self.last_beat = time.time()
         self.apps_cache = None
         self.apps_time = 0.0
+        self.jobs = fileops.Jobs()
         self.lock = threading.Lock()
 
     def apps(self, refresh=False):
@@ -142,7 +143,17 @@ def make_handler(center):
                 if path == "/api/folders":
                     return self._send(200, apps.user_folders())
                 if path == "/api/system":
-                    return self._send(200, {"volume": system.get_volume(), "battery": system.battery(), "wifi_enabled": system.wifi_enabled()})
+                    return self._send(200, {"volume": system.get_volume(), "battery": system.battery(), "wifi_enabled": system.wifi_enabled(),
+                                            "brightness": devices.get_brightness(), "display": devices.display_status()})
+                if path == "/api/places":
+                    return self._send(200, self._places())
+                if path == "/api/job":
+                    job = center.jobs.get((query.get("id") or [""])[0])
+                    return self._send(200, job.snapshot() if job else {"error": "Нет такого задания.", "finished": True})
+                if path == "/api/net":
+                    net = system.network_summary()
+                    net.update({"internet": devices.internet_state(), "wifi_enabled": system.wifi_enabled()})
+                    return self._send(200, net)
                 if path == "/api/wifi":
                     return self._send(200, system.wifi_list())
                 if path == "/api/protection":
@@ -185,6 +196,42 @@ def make_handler(center):
                     if "muted" in body:
                         return self._send(200, {"ok": system.set_mute(bool(body["muted"]))})
                     return self._send(200, {"ok": system.set_volume(int(body.get("value", 0)))})
+                if path == "/api/fs/copy":
+                    return self._send(200, self._fs_copy(body))
+                if path == "/api/fs/cancel":
+                    job = center.jobs.get(str(body.get("id", "")))
+                    if job:
+                        job.cancelled = True
+                    return self._send(200, {"ok": bool(job)})
+                if path == "/api/fs/mkdir":
+                    parent = self._abs(body.get("parent"))
+                    if not parent or not os.path.isdir(parent):
+                        return self._send(200, {"ok": False, "error": "Папка недоступна."})
+                    new, err = fileops.make_folder(parent, str(body.get("name") or "Новая папка"))
+                    return self._send(200, {"ok": new is not None, "path": new, "error": err})
+                if path == "/api/fs/rename":
+                    src = self._abs(body.get("path"))
+                    if not src or not os.path.lexists(src):
+                        return self._send(200, {"ok": False, "error": "Файл не найден."})
+                    new, err = fileops.rename(src, str(body.get("name") or ""))
+                    return self._send(200, {"ok": new is not None, "path": new, "error": err})
+                if path == "/api/fs/trash":
+                    targets = [p for p in (self._abs(x) for x in (body.get("paths") or [])[:500]) if p]
+                    ok, errors = fileops.to_trash(targets, permanent=bool(body.get("permanent")))
+                    return self._send(200, {"ok": not errors, "removed": ok, "errors": errors[:5]})
+                if path == "/api/drive/mount":
+                    mp, err = devices.mount(str(body.get("device", "")))
+                    return self._send(200, {"ok": mp is not None, "path": mp, "error": err})
+                if path == "/api/drive/eject":
+                    ok, msg = devices.eject(str(body.get("device", "")), str(body.get("disk", "")) or None)
+                    return self._send(200, {"ok": ok, "message": msg})
+                if path == "/api/brightness":
+                    return self._send(200, {"ok": devices.set_brightness(int(body.get("value", 100)))})
+                if path == "/api/display":
+                    ok, msg = devices.set_display(str(body.get("mode", "")))
+                    return self._send(200, {"ok": ok, "message": msg})
+                if path == "/api/settings/open":
+                    return self._send(200, {"ok": devices.open_settings(str(body.get("name", "")))})
                 if path == "/api/wifi/connect":
                     ok, msg = system.wifi_connect(str(body.get("ssid", "")), body.get("password") or None)
                     return self._send(200, {"ok": ok, "message": msg})
@@ -261,6 +308,33 @@ def make_handler(center):
             deb, sig = updater.download(info, os.path.join(paths.user_state_dir(), "updates"), lambda m: None)
             ok, lines = _pkexec(["install-deb", deb, sig])
             return {"ok": ok, "lines": lines}
+
+        @staticmethod
+        def _abs(value):
+            """Путь из запроса: только абсолютный, без «..» и нулевых байтов."""
+            if not isinstance(value, str) or not value.startswith("/") or "\0" in value:
+                return None
+            return os.path.normpath(value)
+
+        def _fs_copy(self, body):
+            sources = [p for p in (self._abs(x) for x in (body.get("sources") or [])[:2000]) if p]
+            target = self._abs(body.get("target"))
+            if not sources or not target:
+                return {"ok": False, "error": "Нечего копировать."}
+            job = center.jobs.start(sources, target, bool(body.get("move")))
+            return {"ok": True, "id": job.id}
+
+        def _places(self):
+            home = os.path.expanduser("~")
+            names = [("Домашняя папка", ""), ("Рабочий стол", "Desktop"), ("Документы", "Documents"), ("Загрузки", "Downloads"),
+                     ("Изображения", "Pictures"), ("Музыка", "Music"), ("Видео", "Videos")]
+            folders = []
+            for title, sub in names:
+                p = os.path.join(home, sub) if sub else home
+                if os.path.isdir(p):
+                    folders.append({"name": title, "path": p, "icon": sub.lower() or "home"})
+            folders.append({"name": "Весь компьютер", "path": "/", "icon": "disk"})
+            return {"folders": folders, "drives": devices.drives()}
 
         def _icon(self, aid):
             app = center.app_by_id(aid)

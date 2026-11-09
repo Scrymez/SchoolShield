@@ -65,6 +65,32 @@ namespace SchoolShield
         private static long last;
         private static bool stepping;
 
+        private static bool? weak;
+
+        /// <summary>A computer that would struggle with animations: two cores or fewer, or less than 3.5 GB of memory.</summary>
+        public static bool WeakPc
+        {
+            get
+            {
+                if (weak.HasValue) return weak.Value;
+                bool w = Environment.ProcessorCount <= 2;
+                try
+                {
+                    ulong ram = new Microsoft.VisualBasic.Devices.ComputerInfo().TotalPhysicalMemory;
+                    if (ram > 0 && ram < 3500UL * 1024 * 1024) w = true;
+                }
+                catch { }
+                weak = w;
+                return w;
+            }
+        }
+
+        /// <summary>From the settings: animations are off on a weak computer unless the administrator insisted (AnimationsOnWeakPcs).</summary>
+        public static void ConfigureFrom(Config cfg)
+        {
+            Configure(cfg.Animations && (!WeakPc || cfg.AnimationsOnWeakPcs));
+        }
+
         /// <summary>Turns animations on or off. They are also off when Windows has "animation effects" disabled or in a remote session.</summary>
         public static void Configure(bool wanted)
         {

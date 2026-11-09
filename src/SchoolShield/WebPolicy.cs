@@ -323,10 +323,10 @@ namespace SchoolShield
 
         private static string Css(bool dark)
         {
-            string bg = dark ? "#0a0e1c" : "#f3f6fc", card = dark ? "#131a30" : "#ffffff", hover = dark ? "#1d2848" : "#e8f0ff",
-                accent = dark ? "#22d3ee" : "#0891b2", text = dark ? "#e8edf8" : "#0f172a", muted = dark ? "#8c98b2" : "#5f6e87",
-                line = dark ? "#222d4a" : "#d6deec";
-            string on = dark ? "#06101f" : "#fff";
+            string bg = dark ? "#151130" : "#f9f7ff", card = dark ? "#231d4e" : "#ffffff", hover = dark ? "#342b70" : "#f3e8ff",
+                accent = dark ? "#c084fc" : "#7e22ce", text = dark ? "#f3f4f6" : "#1f2937", muted = dark ? "#b0aad6" : "#586073",
+                line = dark ? "#423980" : "#ded7f0";
+            string on = "#fff";
             return "html,body{margin:0;height:100%;background:" + bg + ";color:" + text + ";font:16px 'Segoe UI',system-ui,sans-serif}" +
                 "body{background:radial-gradient(900px 480px at 15% 0%," + accent + "1f,transparent 70%)," + bg + ";animation:fade .45s ease both}" +
                 "@keyframes fade{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}" +
@@ -334,13 +334,13 @@ namespace SchoolShield
                 ".w{max-width:980px;margin:0 auto;padding:40px 28px}h1{font-size:36px;margin:0 0 6px;letter-spacing:-.4px}p.m{color:" + muted + ";margin:4px 0 22px}" +
                 "form{display:flex;gap:10px;margin:0 0 28px}input[type=text]{flex:1;font:18px 'Segoe UI';padding:13px 18px;border:1px solid " + line + ";border-radius:99px;background:" + card +
                 ";color:" + text + ";outline:0;transition:border-color .2s,box-shadow .2s}input[type=text]:focus{border-color:" + accent + ";box-shadow:0 0 0 4px " + accent + "33}" +
-                "button{font:700 16px 'Segoe UI';padding:0 26px;border:0;border-radius:99px;background:linear-gradient(90deg," + accent + ",#818cf8);color:" + on +
+                "button{font:700 16px 'Segoe UI';padding:0 26px;border:0;border-radius:99px;background:linear-gradient(90deg," + (dark ? "#9333ea" : "#7e22ce") + ",#4f46e5);color:" + on +
                 ";cursor:pointer;transition:transform .18s,box-shadow .18s}button:hover{transform:translateY(-2px);box-shadow:0 10px 26px " + accent + "55}button:active{transform:scale(.96)}" +
                 ".g{display:flex;flex-wrap:wrap;gap:14px}a.c{display:block;width:200px;padding:20px 18px;background:" + card +
                 ";color:" + text + ";text-decoration:none;border-radius:18px;font-size:16px;line-height:1.3;box-shadow:inset 0 0 0 1px " + line + ";animation:up .5s both;transition:transform .2s,box-shadow .2s,background .2s}" +
                 "a.c:nth-child(2){animation-delay:.05s}a.c:nth-child(3){animation-delay:.1s}a.c:nth-child(4){animation-delay:.15s}a.c:nth-child(5){animation-delay:.2s}a.c:nth-child(n+6){animation-delay:.25s}" +
                 "a.c:hover{background:" + hover + ";transform:translateY(-5px);box-shadow:inset 0 0 0 2px " + accent + ",0 14px 30px #00000040}a.c:active{transform:scale(.97)}" +
-                ".b{display:inline-block;margin-top:14px;padding:11px 24px;border-radius:99px;background:" + accent + ";color:" + on + ";text-decoration:none;font-weight:700}.i{font-size:46px;color:" + accent + "}" +
+                ".b{display:inline-block;margin-top:14px;padding:11px 24px;border-radius:99px;background:" + (dark ? "#9333ea" : "#7e22ce") + ";color:" + on + ";text-decoration:none;font-weight:700}.i{font-size:46px;color:" + accent + "}" +
                 "@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}";
         }
 

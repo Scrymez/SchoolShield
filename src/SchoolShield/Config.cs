@@ -187,6 +187,8 @@ namespace SchoolShield
         // Look and feel: motion in the launcher and the panel (also off when Windows has animations off or in a remote session),
         // jokes in the messages for a forbidden action (off = plain sentences), the animated start screen.
         public bool Animations = true;
+        // On a weak computer (two cores or fewer, under 3.5 GB of memory) animations stay off so that nothing ever lags; set true to force them.
+        public bool AnimationsOnWeakPcs = false;
         public bool SarcasticMessages = true;
         public bool Intro = true;
 

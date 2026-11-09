@@ -285,7 +285,10 @@ namespace SchoolShield
                     if (!s.HasInterface) { error = "На этом компьютере нет адаптера Wi-Fi."; return false; }
                     Guid g = s.Iface;
                     uint reason;
-                    uint rc = WlanSetProfile(s.Handle, ref g, 0, BuildProfileXml(ssid, password, security), null, true, IntPtr.Zero, out reason);
+                    string xml = BuildProfileXml(ssid, password, security);
+                    uint rc = WlanSetProfile(s.Handle, ref g, 0, xml, null, true, IntPtr.Zero, out reason);
+                    // an ordinary (not administrator) user may only keep the profile for himself: WLAN_PROFILE_USER
+                    if (rc == 5) rc = WlanSetProfile(s.Handle, ref g, 2, xml, null, true, IntPtr.Zero, out reason);
                     if (rc != 0) { error = "Windows отклонила профиль (код " + rc + ", причина " + reason + "). Проверьте пароль и тип защиты."; return false; }
                     Log.Write("wifi", "Добавлена сеть «" + ssid + "»");
                     return true;

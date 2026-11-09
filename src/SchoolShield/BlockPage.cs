@@ -55,13 +55,13 @@ namespace SchoolShield
 
         public static string Html(ViolationKind kind, Joke joke, string reason, string host, bool dark, bool animate, int attempt)
         {
-            string bg = dark ? Hex(Theme.Background) : "#f3f6fc";
-            string card = dark ? "#131a30" : "#ffffff";
-            string text = dark ? "#e8edf8" : "#0f172a";
-            string muted = dark ? "#8c98b2" : "#5f6e87";
+            string bg = dark ? "#151130" : "#f9f7ff";
+            string card = dark ? "#231d4e" : "#ffffff";
+            string text = dark ? "#f3f4f6" : "#1f2937";
+            string muted = dark ? "#b0aad6" : "#586073";
             string accent = Hex(ViolationForm.AccentOf(kind));
-            string btnText = dark ? "#06101f" : "#ffffff";
-            string accentBtn = dark ? "#22d3ee" : "#0891b2";
+            string btnText = "#ffffff";
+            string accentBtn = dark ? "#9333ea" : "#7e22ce";
 
             StringBuilder css = new StringBuilder();
             css.Append("*{box-sizing:border-box}html,body{margin:0;height:100%;background:" + bg + ";color:" + text + ";font:16px 'Segoe UI',system-ui,sans-serif;overflow:hidden}");
@@ -74,7 +74,7 @@ namespace SchoolShield
             css.Append("p.l{font-size:21px;color:" + muted + ";margin:0 0 20px;line-height:1.4}");
             css.Append("p.k{font-size:15px;color:" + accent + ";margin:0 0 18px;font-style:italic}");
             css.Append(".c{display:inline-block;margin:0 6px 24px;padding:7px 16px;border-radius:99px;background:" + accent + "22;color:" + accent + ";font-size:14px;max-width:90%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;vertical-align:bottom}");
-            css.Append(".b{display:inline-block;padding:13px 30px;border-radius:14px;background:linear-gradient(90deg," + accentBtn + ",#818cf8);color:" + btnText + ";text-decoration:none;font-weight:700;font-size:17px;transition:transform .18s,box-shadow .18s}");
+            css.Append(".b{display:inline-block;padding:13px 30px;border-radius:14px;background:linear-gradient(90deg," + accentBtn + ",#4f46e5);color:" + btnText + ";text-decoration:none;font-weight:700;font-size:17px;transition:transform .18s,box-shadow .18s}");
             css.Append(".b:hover{transform:translateY(-3px);box-shadow:0 12px 30px " + accentBtn + "55}.b:active{transform:scale(.96)}");
             css.Append(".n{position:fixed;left:0;right:0;bottom:18px;color:" + muted + ";font-size:13px;text-align:center}");
             if (animate)

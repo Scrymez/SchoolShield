@@ -55,10 +55,12 @@ namespace SchoolShield
         {
             Cfg = cfg;
             Metrics.Init();
-            Motion.Configure(cfg.Animations);
+            Motion.ConfigureFrom(cfg);
             Ui.Sarcastic = cfg.SarcasticMessages;
             User = UserData.Load();
-            Theme.Apply(User.Theme != "light");
+            // the teacher's centre starts light and large (easy to read); students start dark
+            Theme.Apply(User.Theme == "dark" || (User.Theme != "light" && !State.Windowed));
+            Metrics.TextBoost = BoostOf(State.Windowed ? (string.IsNullOrEmpty(User.TextSize) ? "large" : User.TextSize) : "normal");
 
             Text = "SchoolShield";
             ShowInTaskbar = false;
@@ -112,14 +114,29 @@ namespace SchoolShield
             Padding = new Padding(0, State.Soft ? 0 : DockForm.BarHeight, 0, 0);
 
             // sections (only those the administrator enabled)
-            AddSection(new HomeSection(this));
-            AddSection(new AppsSection(this));
-            AddSection(new DocsSection(this));
-            AddSection(new MediaSection(this));
-            AddSection(new FilesSection(this));
-            AddSection(new UsbSection(this));
-            AddSection(new WebSection(this));
-            AddSection(new SystemSection(this));
+            if (State.Windowed)
+            {
+                // The teacher's centre: big buttons with plain names, one file manager for folders and flash drives, Wi-Fi, settings, help.
+                AddSectionAlways(new TeacherHomeSection(this));
+                AddSectionAlways(new TeacherFilesSection(this));
+                AddSectionAlways(new DocsSection(this));
+                AddSectionAlways(new MediaSection(this));
+                AddSectionAlways(new AppsSection(this));
+                AddSectionAlways(new TeacherNetworkSection(this));
+                AddSectionAlways(new TeacherSettingsSection(this));
+                AddSectionAlways(new TeacherHelpSection(this));
+            }
+            else
+            {
+                AddSection(new HomeSection(this));
+                AddSection(new AppsSection(this));
+                AddSection(new DocsSection(this));
+                AddSection(new MediaSection(this));
+                AddSection(new FilesSection(this));
+                AddSection(new UsbSection(this));
+                AddSection(new WebSection(this));
+                AddSection(new SystemSection(this));
+            }
 
             content = new Panel();
             content.Dock = DockStyle.Fill;
@@ -170,6 +187,12 @@ namespace SchoolShield
         private static IEnumerable<Control> ControlsOf(Control c)
         {
             foreach (Control x in c.Controls) yield return x;
+        }
+
+        private void AddSectionAlways(Section s)
+        {
+            sections[s.Id] = s;
+            order.Add(s.Id);
         }
 
         private void AddSection(Section s)
@@ -234,6 +257,24 @@ namespace SchoolShield
             header.Subtitle = bell ?? Cfg.Subtitle;
         }
 
+        public static float BoostOf(string size)
+        {
+            return size == "huge" ? 1.4f : size == "large" ? 1.2f : 1f;
+        }
+
+        public string TextSizeNow { get { return string.IsNullOrEmpty(User.TextSize) ? (State.Windowed ? "large" : "normal") : User.TextSize; } }
+
+        /// <summary>Teacher's "Text size" buttons: normal / large / huge. The whole centre is rebuilt at the new size.</summary>
+        public void SetTextSize(string size)
+        {
+            User.TextSize = size;
+            User.Save();
+            Metrics.TextBoost = BoostOf(size);
+            string id = current == null ? "home" : current.Id;
+            BuildUi(id);
+            ReloadCatalog();
+        }
+
         public void ToggleTheme()
         {
             User.Theme = Theme.Dark ? "light" : "dark";
@@ -255,7 +296,7 @@ namespace SchoolShield
             clockTimer.Interval = 1000;
             clockTimer.Tick += delegate { UpdateHeader(); };
             clockTimer.Start();
-            StartDriveWatch();
+            if (!State.Windowed) StartDriveWatch();
 
             if (State.Windowed)
             {
@@ -322,13 +363,35 @@ namespace SchoolShield
             driveTimer.Start();
         }
 
+        private bool drivePolling;
+
+        /// <summary>Looks at the drives on a worker thread (a disc or a network drive can make DriveInfo wait), then tells the window.</summary>
         private void CheckDrives()
+        {
+            if (drivePolling) return;
+            string mode = (Cfg.UsbMode ?? "readonly").ToLowerInvariant();
+            if (!Cfg.SectionEnabled("usb") || (mode == "block" && !State.Privileged)) { driveLetters = ""; return; }
+            drivePolling = true;
+            System.Threading.ThreadPool.QueueUserWorkItem(delegate
+            {
+                List<DriveEntry> now = null;
+                try { now = Drives.List(); } catch { }
+                try
+                {
+                    BeginInvoke(new Action(delegate
+                    {
+                        drivePolling = false;
+                        if (now != null) ApplyDrives(now);
+                    }));
+                }
+                catch { drivePolling = false; }
+            });
+        }
+
+        private void ApplyDrives(List<DriveEntry> now)
         {
             try
             {
-                string mode = (Cfg.UsbMode ?? "readonly").ToLowerInvariant();
-                if (!Cfg.SectionEnabled("usb") || (mode == "block" && !State.Privileged)) { driveLetters = ""; return; }
-                List<DriveEntry> now = Drives.List();
                 List<string> letters = new List<string>();
                 foreach (DriveEntry d in now) letters.Add(d.Letter);
                 string joined = string.Join(",", letters.ToArray());
@@ -359,8 +422,9 @@ namespace SchoolShield
                 Cfg.UsbMode = fresh.UsbMode;
                 Cfg.OwnFileDialogs = fresh.OwnFileDialogs;
                 Cfg.Animations = fresh.Animations;
+                Cfg.AnimationsOnWeakPcs = fresh.AnimationsOnWeakPcs;
                 Cfg.SarcasticMessages = fresh.SarcasticMessages;
-                Motion.Configure(Cfg.Animations);
+                Motion.ConfigureFrom(Cfg);
                 Ui.Sarcastic = Cfg.SarcasticMessages;
                 Cfg.AllowedExtensions = fresh.AllowedExtensions;
                 if (!State.Soft) UserPolicy.ApplyUsb(Cfg);        // the flash-drive mode takes effect at once
@@ -686,7 +750,10 @@ namespace SchoolShield
         {
             if (!sections.ContainsKey("files")) return;
             ShowSection("files");
-            ((FilesSection)sections["files"]).Reveal(path);
+            Section files = sections["files"];
+            TeacherFilesSection teacher = files as TeacherFilesSection;
+            if (teacher != null) teacher.Reveal(path);
+            else ((FilesSection)files).Reveal(path);
         }
 
         public void OpenUrl(string url)

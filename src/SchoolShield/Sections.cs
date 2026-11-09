@@ -150,6 +150,8 @@ namespace SchoolShield
     /// <summary>The greeting card at the top of the home page: a gradient with moving light, a watermark shield, the greeting and the date.</summary>
     internal sealed class HeroCard : Control, IEnterAnimated
     {
+        /// <summary>The line under the greeting; the date when it is not set.</summary>
+        public string Subtitle;
         private double enter = 1;
         private double shine = -1;
         private Tween enterTween, shineTween;
@@ -194,21 +196,30 @@ namespace SchoolShield
             double en = Math.Max(0, Math.Min(1, enter));
             RectangleF r = new RectangleF(1, 1 + (float)((1 - en) * Metrics.U(16)), Width - 3, Height - 3);
             float radius = Metrics.U(26);
-            Color left = Theme.Dark ? Fx.Blend(Theme.Card, Theme.Accent2, 0.55) : Fx.Blend(Color.White, Theme.Accent2, 0.85);
-            Color right = Theme.Dark ? Fx.Blend(Theme.Card, Theme.Accent, 0.40) : Fx.Blend(Color.White, Theme.Accent, 0.85);
+            // the hero of the school's website: indigo-900 -> blue-800 -> purple-900, with soft translucent capsules
+            Color c1 = Color.FromArgb(49, 46, 129), c2 = Color.FromArgb(30, 64, 175), c3 = Color.FromArgb(88, 28, 135);
             using (GraphicsPath path = Fx.Round(r, radius))
             {
-                using (LinearGradientBrush b = Fx.Gradient(r, Fx.Alpha(left, en), Fx.Alpha(right, en), 20f)) g.FillPath(b, path);
+                using (LinearGradientBrush b = Fx.Gradient(r, Fx.Alpha(c1, en), Fx.Alpha(c3, en), 20f))
+                {
+                    ColorBlend cb = new ColorBlend(3);
+                    cb.Colors = new Color[] { Fx.Alpha(c1, en), Fx.Alpha(c2, en), Fx.Alpha(c3, en) };
+                    cb.Positions = new float[] { 0f, 0.5f, 1f };
+                    b.InterpolationColors = cb;
+                    g.FillPath(b, path);
+                }
                 GraphicsState st = g.Save();
                 g.SetClip(path);
-                // soft lights
-                Fx.Glow(g, new PointF(r.Right - r.Width * 0.12f, r.Y + r.Height * 0.2f), r.Height * 1.5f, Color.White, (int)(46 * en));
-                Fx.Glow(g, new PointF(r.X + r.Width * 0.25f, r.Bottom), r.Height * 1.2f, Theme.Accent, (int)(60 * en));
-                // watermark shield
-                float ss = r.Height * 1.25f;
-                using (GraphicsPath shield = BrandControl.ShieldPath(new RectangleF(r.Right - ss * 0.95f, r.Y - ss * 0.1f, ss, ss)))
-                using (SolidBrush b = new SolidBrush(Color.FromArgb((int)(34 * en), 255, 255, 255)))
-                    g.FillPath(b, shield);
+                Fx.Glow(g, new PointF(r.Right - r.Width * 0.12f, r.Y + r.Height * 0.2f), r.Height * 1.5f, Color.White, (int)(40 * en));
+                Fx.Glow(g, new PointF(r.X + r.Width * 0.25f, r.Bottom), r.Height * 1.2f, Color.FromArgb(168, 85, 247), (int)(70 * en));
+                // capsules and a circle, like the shapes on the site
+                float cx0 = r.Right - r.Width * 0.30f;
+                using (SolidBrush b = new SolidBrush(Color.FromArgb((int)(30 * en), 255, 255, 255)))
+                {
+                    Fx.FillRound(g, b, new RectangleF(cx0, r.Y + r.Height * 0.10f, r.Height * 1.5f, r.Height * 0.52f), r.Height * 0.26f);
+                    Fx.FillRound(g, b, new RectangleF(cx0 + r.Height * 0.55f, r.Y + r.Height * 0.52f, r.Height * 1.6f, r.Height * 0.55f), r.Height * 0.27f);
+                    g.FillEllipse(b, r.Right - r.Height * 0.9f, r.Y - r.Height * 0.25f, r.Height * 1.1f, r.Height * 1.1f);
+                }
                 // one sweep of light across the card
                 if (shine >= 0 && shine <= 1)
                 {
@@ -222,10 +233,10 @@ namespace SchoolShield
 
             float pad = Metrics.U(34);
             float slide = (float)((1 - Easing.OutCubic(en)) * Metrics.U(30));
-            Color ink = Theme.Dark ? Color.White : Color.FromArgb(15, 23, 42);
+            Color ink = Color.White;
             Fx.Text(g, Greeting(), Fx.Ui(Metrics.Fz(Metrics.Compact ? 24 : 30), FontStyle.Bold), Fx.Alpha(ink, en),
                 new RectangleF(pad - slide, r.Y + r.Height * 0.2f, r.Width - pad * 2, Metrics.U(52)), StringAlignment.Near, StringAlignment.Near, true);
-            Fx.Text(g, DateText(), Fx.Ui(Metrics.Fz(Metrics.Compact ? 12 : 14)), Fx.Alpha(ink, en * 0.78),
+            Fx.Text(g, Subtitle ?? DateText(), Fx.Ui(Metrics.Fz(Metrics.Compact ? 12 : 14)), Fx.Alpha(ink, en * 0.78),
                 new RectangleF(pad - slide * 1.4f, r.Y + r.Height * 0.2f + Metrics.U(Metrics.Compact ? 40 : 52), r.Width - pad * 2, Metrics.U(30)), StringAlignment.Near, StringAlignment.Near, true);
         }
 

@@ -17,6 +17,8 @@ namespace SchoolShield
     {
         public static float Dpi = 1f;
         public static float UiScale = 1f;
+        /// <summary>"Text size" of the teacher's centre: 1 = normal, 1.2 = large, 1.4 = very large. Everything in the launcher scales with it.</summary>
+        public static float TextBoost = 1f;
         public static int LogicalWidth = 1920;
         public static int LogicalHeight = 1080;
 
@@ -44,10 +46,10 @@ namespace SchoolShield
         public static int S(int px) { return (int)Math.Round(px * Dpi); }
 
         /// <summary>Pixels for DPI and for the size of the screen (the launcher).</summary>
-        public static int U(int px) { return (int)Math.Round(px * Dpi * UiScale); }
+        public static int U(int px) { return (int)Math.Round(px * Dpi * UiScale * TextBoost); }
 
         /// <summary>Font size in points for the launcher: a little smaller on small screens, a little bigger on large ones.</summary>
-        public static float Fz(float pt) { return pt * Math.Max(0.9f, Math.Min(1.15f, UiScale)); }
+        public static float Fz(float pt) { return pt * Math.Max(0.9f, Math.Min(1.15f, UiScale)) * TextBoost; }
 
         public static int SidebarWidth { get { return Tiny ? U(86) : Compact ? U(228) : U(256); } }
         public static int DockHeight { get { return S(40); } }
@@ -62,47 +64,57 @@ namespace SchoolShield
     {
         public static bool Dark = true;
         public static Color Background, Header, Sidebar, Card, CardHover, Plate, Accent, Accent2, OnAccent, Text, Muted, Danger, Line, Success, Warn;
+        /// <summary>The saturated pair for filled buttons and banners (white text on top): the purple-to-indigo of the school's website.</summary>
+        public static Color BrandA, BrandB;
 
         static Theme() { Apply(true); }
 
+        /// <summary>
+        /// The colours of интеллектшкола.рф: purple (#7e22ce) to indigo (#4338ca) on white and soft lilac in the light theme,
+        /// deep indigo-violet in the dark one, grey #1f2937 text.
+        /// </summary>
         public static void Apply(bool dark)
         {
             Dark = dark;
             if (dark)
             {
-                Background = Color.FromArgb(10, 14, 28);
-                Header = Color.FromArgb(10, 14, 28);
-                Sidebar = Color.FromArgb(7, 10, 21);
-                Card = Color.FromArgb(19, 26, 48);
-                CardHover = Color.FromArgb(29, 40, 72);
+                Background = Color.FromArgb(21, 17, 48);
+                Header = Color.FromArgb(21, 17, 48);
+                Sidebar = Color.FromArgb(14, 11, 34);
+                Card = Color.FromArgb(35, 29, 78);
+                CardHover = Color.FromArgb(52, 43, 112);
                 Plate = Color.FromArgb(22, 255, 255, 255);
-                Accent = Color.FromArgb(34, 211, 238);
+                Accent = Color.FromArgb(192, 132, 252);
                 Accent2 = Color.FromArgb(129, 140, 248);
-                OnAccent = Color.FromArgb(6, 16, 31);
-                Text = Color.FromArgb(232, 237, 248);
-                Muted = Color.FromArgb(140, 152, 178);
-                Line = Color.FromArgb(34, 45, 74);
+                BrandA = Color.FromArgb(147, 51, 234);
+                BrandB = Color.FromArgb(79, 70, 229);
+                OnAccent = Color.White;
+                Text = Color.FromArgb(243, 244, 246);
+                Muted = Color.FromArgb(176, 170, 214);
+                Line = Color.FromArgb(66, 57, 128);
                 Danger = Color.FromArgb(244, 63, 94);
                 Success = Color.FromArgb(52, 211, 153);
                 Warn = Color.FromArgb(251, 191, 36);
             }
             else
             {
-                Background = Color.FromArgb(243, 246, 252);
-                Header = Color.FromArgb(243, 246, 252);
-                Sidebar = Color.FromArgb(232, 237, 247);
+                Background = Color.FromArgb(249, 247, 255);
+                Header = Color.FromArgb(249, 247, 255);
+                Sidebar = Color.FromArgb(243, 237, 255);
                 Card = Color.White;
-                CardHover = Color.FromArgb(232, 240, 255);
-                Plate = Color.FromArgb(14, 15, 23, 42);
-                Accent = Color.FromArgb(8, 145, 178);
-                Accent2 = Color.FromArgb(79, 70, 229);
+                CardHover = Color.FromArgb(243, 232, 255);
+                Plate = Color.FromArgb(18, 76, 29, 149);
+                Accent = Color.FromArgb(126, 34, 206);
+                Accent2 = Color.FromArgb(67, 56, 202);
+                BrandA = Color.FromArgb(126, 34, 206);
+                BrandB = Color.FromArgb(67, 56, 202);
                 OnAccent = Color.White;
-                Text = Color.FromArgb(15, 23, 42);
-                Muted = Color.FromArgb(95, 110, 135);
-                Line = Color.FromArgb(214, 222, 236);
-                Danger = Color.FromArgb(225, 29, 72);
+                Text = Color.FromArgb(31, 41, 55);
+                Muted = Color.FromArgb(88, 96, 115);
+                Line = Color.FromArgb(222, 215, 240);
+                Danger = Color.FromArgb(190, 18, 60);
                 Success = Color.FromArgb(5, 150, 105);
-                Warn = Color.FromArgb(217, 119, 6);
+                Warn = Color.FromArgb(180, 83, 9);
             }
         }
 
@@ -259,6 +271,8 @@ namespace SchoolShield
         public BtnKind Kind;
         /// <summary>Text alignment: centred by default, left for list-like buttons (the task buttons of the dock).</summary>
         public StringAlignment HAlign = StringAlignment.Center;
+        /// <summary>An icon (Segoe MDL2 Assets character) drawn before the text.</summary>
+        public string Glyph;
         private readonly AnimValue hover;
         private readonly AnimValue press;
         private double ripple = -1;
@@ -300,7 +314,8 @@ namespace SchoolShield
         public override Size GetPreferredSize(Size proposedSize)
         {
             Size t = TextRenderer.MeasureText(string.IsNullOrEmpty(Text) ? " " : Text, Font, Size.Empty, TextFormatFlags.NoPadding);
-            return new Size(t.Width + Padding.Horizontal + Metrics.S(26), Math.Max(t.Height + Padding.Vertical + Metrics.S(14), Metrics.S(38)));
+            int glyph = string.IsNullOrEmpty(Glyph) ? 0 : (int)(Font.Size * 1.9f * Metrics.Dpi) + Metrics.S(8);
+            return new Size(t.Width + glyph + Padding.Horizontal + Metrics.S(26), Math.Max(t.Height + Padding.Vertical + Metrics.S(14), Metrics.S(38)));
         }
 
         protected override void OnMouseEnter(EventArgs e) { hover.To(1); base.OnMouseEnter(e); }
@@ -351,8 +366,8 @@ namespace SchoolShield
                 else switch (Kind)
                 {
                     case BtnKind.Primary:
-                        Color a = Fx.Blend(Theme.Accent, Color.White, h * 0.16), c2 = Fx.Blend(Theme.Accent2, Color.White, h * 0.16);
-                        if (h > 0.01 && enabled) Fx.Shadow(g, new RectangleF(r.X, r.Y + Metrics.S(2), r.Width, r.Height), radius, Metrics.S(8), (int)(110 * h), Theme.Accent);
+                        Color a = Fx.Blend(Theme.BrandA, Color.White, h * 0.16), c2 = Fx.Blend(Theme.BrandB, Color.White, h * 0.16);
+                        if (h > 0.01 && enabled) Fx.Shadow(g, new RectangleF(r.X, r.Y + Metrics.S(2), r.Width, r.Height), radius, Metrics.S(8), (int)(110 * h), Theme.BrandA);
                         using (LinearGradientBrush b = Fx.Gradient(r, Fx.Alpha(a, dim), Fx.Alpha(c2, dim), 0f)) g.FillPath(b, path);
                         textColor = customText ? ForeColor : Theme.OnAccent;
                         break;
@@ -386,8 +401,20 @@ namespace SchoolShield
             }
 
             float left = HAlign == StringAlignment.Near ? Metrics.S(12) : 0;
-            Fx.Text(g, Text, Font, Fx.Alpha(textColor, enabled ? 1 : 0.55), new RectangleF(left, 0, Width - left - (left > 0 ? Metrics.S(8) : 0), Height - (float)(p * 1)),
-                HAlign, StringAlignment.Center, true);
+            RectangleF box = new RectangleF(left, 0, Width - left - (left > 0 ? Metrics.S(8) : 0), Height - (float)(p * 1));
+            if (!string.IsNullOrEmpty(Glyph))
+            {
+                // icon, a gap, then the text; the pair is centred as a whole
+                Font gf = Fx.Icons(Font.Size * 1.15f);
+                float gw = g.MeasureString(Glyph, gf).Width;
+                float tw = g.MeasureString(Text ?? "", Font, 100000, StringFormat.GenericTypographic).Width;
+                float total = gw + Metrics.S(8) + tw;
+                float x = HAlign == StringAlignment.Near ? box.X : box.X + Math.Max(0, (box.Width - total) / 2);
+                Fx.Text(g, Glyph, gf, Fx.Alpha(textColor, enabled ? 1 : 0.55), new RectangleF(x, box.Y, gw + 4, box.Height), StringAlignment.Near, StringAlignment.Center, false);
+                Fx.Text(g, Text, Font, Fx.Alpha(textColor, enabled ? 1 : 0.55), new RectangleF(x + gw + Metrics.S(8), box.Y, Math.Max(10, box.Right - x - gw - Metrics.S(8)), box.Height),
+                    StringAlignment.Near, StringAlignment.Center, true);
+            }
+            else Fx.Text(g, Text, Font, Fx.Alpha(textColor, enabled ? 1 : 0.55), box, HAlign, StringAlignment.Center, true);
         }
 
         protected override void Dispose(bool disposing)
@@ -859,7 +886,7 @@ namespace SchoolShield
             if (glow > 0.01) Fx.Glow(g, new PointF(r.X + r.Width / 2, r.Y + r.Height / 2), r.Width * 1.1f, Theme.Accent, (int)(90 * glow));
             using (GraphicsPath p = ShieldPath(r))
             {
-                using (LinearGradientBrush b = Fx.Gradient(r, Theme.Accent, Theme.Accent2, 60f)) g.FillPath(b, p);
+                using (LinearGradientBrush b = Fx.Gradient(r, Theme.BrandA, Theme.BrandB, 60f)) g.FillPath(b, p);
                 using (Pen pen = new Pen(Color.FromArgb(70, 255, 255, 255), Math.Max(1f, r.Width / 28f))) g.DrawPath(pen, p);
             }
             if (check > 0)
@@ -944,7 +971,7 @@ namespace SchoolShield
             {
                 using (SolidBrush b = new SolidBrush(Fx.Blend(Theme.Card, Theme.CardHover, h))) g.FillPath(b, p);
                 if (s > 0.01)
-                    using (LinearGradientBrush b = Fx.Gradient(r, Fx.Alpha(Theme.Accent, s), Fx.Alpha(Theme.Accent2, s), 0f)) g.FillPath(b, p);
+                    using (LinearGradientBrush b = Fx.Gradient(r, Fx.Alpha(Theme.BrandA, s), Fx.Alpha(Theme.BrandB, s), 0f)) g.FillPath(b, p);
                 using (Pen pen = new Pen(Fx.Alpha(Fx.Blend(Theme.Line, Theme.Accent, h), 1 - s * 0.9), 1.3f)) g.DrawPath(pen, p);
             }
             Fx.Text(g, caption, Fx.Ui(Metrics.Fz(Metrics.Compact ? 10f : 10.5f), FontStyle.Bold), Fx.Blend(Theme.Text, Theme.OnAccent, s), new RectangleF(0, 0, Width, Height),
@@ -1411,7 +1438,7 @@ namespace SchoolShield
             double en = Math.Max(0, Math.Min(1, enter));
             RectangleF r = new RectangleF(1, 1 + (float)((1 - en) * Metrics.S(10)), Width - 3, Height - 3);
             using (GraphicsPath p = Fx.Round(r, Metrics.S(14)))
-            using (LinearGradientBrush b = Fx.Gradient(r, Fx.Alpha(Theme.Accent, en), Fx.Alpha(Theme.Accent2, en), 0f))
+            using (LinearGradientBrush b = Fx.Gradient(r, Fx.Alpha(Theme.BrandA, en), Fx.Alpha(Theme.BrandB, en), 0f))
                 g.FillPath(b, p);
             Fx.Text(g, Text, Fx.Ui(10.5f, FontStyle.Bold), Fx.Alpha(Theme.OnAccent, en), new RectangleF(r.X + Metrics.S(18), r.Y, r.Width - Metrics.S(30), r.Height),
                 StringAlignment.Near, StringAlignment.Center, true);
